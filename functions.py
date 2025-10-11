@@ -132,24 +132,29 @@ materials = {
 
 }
 def dicom2array(dcm):
-    
-    # Verifica se a imagem DICOM está comprimida (JPEG Lossless, Process 14)
-    if dcm.file_meta.TransferSyntaxUID == "1.2.840.10008.1.2.4.70":
-        print("Imagem JPEG Lossless detectada, tentando descompactar...")
-        try:
-            dcm.decompress(handler_name="pylibjpeg")  # Usa pylibjpeg para descompressão
-        except Exception as e:
-            print(f"Erro ao descompactar: {e}")
-            return None  # Retorna None se falhar
+    # Detecta o tipo de codificação da imagem DICOM
+    tsuid = dcm.file_meta.TransferSyntaxUID
 
-    # Converte os pixels para um array NumPy
+    if tsuid == "1.2.840.10008.1.2.4.70":
+        print("Compressed DICOM detected (JPEG Lossless). Attempting to decompress...")
+        try:
+            dcm.decompress(handler_name="pylibjpeg")
+            print("Decompression successful.")
+        except Exception as e:
+            print(f"Failed to decompress image: {e}")
+            return None
+    else:
+        print("Standard uncompressed DICOM detected. Proceeding with normal reading.")
+
+    # Tenta converter a imagem para array
     try:
-        img_raw = np.float64(dcm.pixel_array)  # Converte a matriz de pixels
-        output = np.array(dcm.RescaleSlope * img_raw + dcm.RescaleIntercept, dtype=int)  
+        img_raw = np.float64(dcm.pixel_array)
+        output = np.array(dcm.RescaleSlope * img_raw + dcm.RescaleIntercept, dtype=int)
+        print("DICOM image successfully converted to array.")
         return output
     except Exception as e:
-        print(f"Erro ao converter DICOM para array: {e}")
-        return None  # Retorna None em caso de erro
+        print(f"Failed to convert DICOM to array: {e}")
+        return None
 def ConvertToUint8(dicom_image_array):
     orig_min = dicom_image_array.min()
     orig_max = dicom_image_array.max()

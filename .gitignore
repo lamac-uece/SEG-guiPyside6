@@ -5,3 +5,5 @@ images
 *.spec
 defaultImageDir.txt
 defaultMaskDir.txt
+__pycache__
+venv

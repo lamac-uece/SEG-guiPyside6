@@ -25,6 +25,7 @@ from src.services.image_processing import (
     compute_superpixels,
     removeSkinAndObjects,
 )
+from src.services.mask_io import load_mask, save_mask
 from src.utils.image_utils import (
     ConvertToUint8,
     tissue_segmentation,
@@ -457,12 +458,7 @@ class MplToolbar(NavigationToolbar2QT):
                 filePath, _ = QFileDialog.getSaveFileName(self, "Save File",
                                                             f"{a.path()}/{suggestedName}", filter="csv(*.csv)")
                 if(filePath != ""):
-                    np.savetxt(filePath, segmentedMask, fmt='%d', delimiter=',')  
-                    f = open(filePath, "ab")
-                    np.savetxt(f, np.array(informacoesLista), fmt='%d', newline=' ', delimiter=',')
-                    f.write(b"\n")
-                    np.savetxt(f, [np.count_nonzero(ConvertToUint8(select_RoI(dicom2array(pydicom.dcmread(fileName_global, force=True)))))], fmt='%d', delimiter=',')
-                    f.close()
+                    save_mask(filePath, segmentedMask, informacoes, area)
     # Rollbacks a state of the paint, copying the saved mask to the mask3d
     # deleting the copied and updating the view to the new mask with rollback
     def back_paint(self):
@@ -896,22 +892,9 @@ class ImageViewer(QMainWindow):
             fileName_global = fileName
             if(fileName_global.split(".")[1] == "csv"):
                 csvFlag = True
-                file = open(fileName_global)
-                lines = file.readlines()
-                area = int(lines[lines.__len__()-1].strip())
-                informacoesStr = lines[lines.__len__()-2].split(" ")[:-1]
-                for i in range(informacoesStr.__len__()):
-                    informacoesStr[i] = informacoesStr[i].split(",")
-                informacoesInt = np.array(informacoesStr, dtype=int)
-                informacoes = {"colors":[], "identifier":[], "tissue":[]}
-                for i in range(informacoesInt.__len__()):
-                    informacoes["colors"].append(np.array([informacoesInt[i][0], informacoesInt[i][1], informacoesInt[i][2]]))
-                    informacoes["identifier"].append(informacoesInt[i][3])
-                    informacoes["tissue"].append(informacoesInt[i][4])
-                tempMask = []
-                for i in range(lines.__len__()-2):
-                    tempMask.append(np.array(lines[i].split(","), dtype=int))
-                segmentedMask = np.array(tempMask, dtype=int)
+                from src.services.mask_io import load_mask
+                segmentedMask, informacoes, area = load_mask(fileName_global)
+                self.recoveryMask3d()
                 self.recoveryMask3d()
                 file.close()
                 self.plotwidget_modify.axes.clear()

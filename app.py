@@ -5,17 +5,38 @@ from PySide6.QtGui import *
 from PySide6.QtCore import *
 import cv2 as cv2
 from matplotlib import pyplot as plt
+import numpy as np
+from skimage import exposure
 import skimage.filters.edges
 # import pydicom.encoders.gdcm
 # import gdcm
 # from libjpeg import decode_pixel_data
 # import pydicom.encoders.pylibjpeg
 import pydicom.pixel_data_handlers.pylibjpeg_handler
-from skimage.segmentation import mark_boundaries
+from skimage.segmentation import mark_boundaries, slic
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
+import matplotlib.backends.backend_qt5 as backend
+from src.services.dicom_service import dicom2array
+from src.services.image_processing import (
+    select_RoI,
+    apply_clahe,
+    compute_superpixels,
+    removeSkinAndObjects,
+)
+from src.utils.image_utils import (
+    ConvertToUint8,
+    tissue_segmentation,
+    bitwise_minus,
+    remove_small_CCs,
+    find_extreme_points,
+    compose_muscle_mask,
+)
+from src.models.tissue_config import materials, colors, dictTissues
 from functions import _Mode
-from functions import *
+from functions import CustomDialog
+# from src.views.dialogs import CustomDialog
 import copy
 from PIL import Image
 from os import path
@@ -543,10 +564,16 @@ class PlotSuperPixelMask(QWidget):
         global max_size_factor
         global selected_hu
         # apply SLIC and extract (approximately) the supplied number of segments
-        segments_global = slic(dicom_image_array, n_segments=numSegments, sigma=sigma_slic, \
-                        channel_axis=None, compactness=compactness, start_label=1, max_num_iter=max_num_iter, min_size_factor=min_size_factor, max_size_factor=max_size_factor)
-        
-        segments_global[dicom_image_array < 20] = 0
+        segments_global = compute_superpixels(
+            dicom_image_array,
+            n_segments=numSegments,
+            sigma=sigma_slic,
+            compactness=compactness,
+            start_label=1,
+            max_num_iter=max_num_iter,
+            min_size_factor=min_size_factor,
+            max_size_factor=max_size_factor
+        )
         self.axes.clear()
         self.axes.set_title("Máscara/SuperPixel")
         if(not np.array_equal(mask3d, [])):
@@ -602,9 +629,11 @@ class PlotWidgetModify(QWidget):
             # Method that makes the CLAHE
             global clip_limit
             global nbins
-            dicom_image_array = (exposure.equalize_adapthist(dicom_image_array/255, clip_limit=clip_limit, nbins=nbins))
-            if(dicom_image_array.max()<=1):
-                dicom_image_array[:,:] = (dicom_image_array[:,:]*255).astype('uint8')
+            dicom_image_array = apply_clahe(
+                dicom_image_array,
+                clip_limit=clip_limit,
+                nbins=nbins
+            )
             self.axes.clear()
             self.axes.set_title("Imagem Conferência")
             self.axes.imshow(dicom_image_array, cmap='gray')
@@ -890,7 +919,11 @@ class ImageViewer(QMainWindow):
                 self.plotwidget_modify.view.draw()
                 dicom_image_array = []
             else:
-                dicom_image_array = dicom2array(pydicom.dcmread(fileName_global, force=True))
+                dcm = pydicom.dcmread(fileName_global, force=True)
+                dicom_image_array = dicom2array(dcm)
+                if dicom_image_array is None:
+                    QMessageBox.critical(self, "Erro", "Não foi possível ler o arquivo DICOM.")
+                    return
                 
                 # Obter os valores na leitura de imagem no diretório
                 muscle_hu = tissue_segmentation(select_RoI(dicom_image_array), "muscle")
@@ -898,7 +931,7 @@ class ImageViewer(QMainWindow):
                 selected_hu = np.ones((dicom_image_array.shape))
                 
                 dicom_image_array =  ConvertToUint8(dicom_image_array)
-                area = np.count_nonzero(ConvertToUint8(select_RoI(dicom2array(pydicom.dcmread(fileName_global, force=True)))))
+                area = np.count_nonzero(ConvertToUint8(select_RoI(dicom_image_array)))
                 # self.plotwidget_original.on_change()
                 self.plotwidget_modify.on_change()
                 ok = 0

@@ -1,5 +1,16 @@
 import numpy as np
 from skimage.measure import label, regionprops
+from src.models.tissue_config import materials
+
+def tissue_segmentation(dicom_image_array, tissue):
+    """
+    Segmenta um tecido específico na imagem com base
+    nos intervalos HU definidos em tissue_config.
+    """
+    segm_img = np.zeros_like(dicom_image_array, dtype=np.bool_)
+    segm_img[ (dicom_image_array >= materials[tissue][0][0]) &
+             (dicom_image_array <= materials[tissue][0][1]) ] = 1
+    return segm_img
 
 def bitwise_minus(img1, img2):
     """Set subtraction applied to the images."""

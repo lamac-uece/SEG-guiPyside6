@@ -318,20 +318,20 @@ class MplToolbar(NavigationToolbar2QT):
         if 'zoom' in self._actions:
             self._actions['zoom'].setChecked(self.mode.name == 'ZOOM')
     def change_undo(self):
-        state.undo = not state.undo
-        if(state.undo):
-            if(state.plot == 1 and state.undo == 0):
+        self.undo = not self.undo
+        if(self.undo):
+            if(self.plot == 1 and state.undo == 0):
                 state.undo = 1
-            elif(state.plot == 2 and state.undo == 0):
+            elif(self.plot == 2 and state.undo == 0):
                 state.undo = 2
             else:
                 state.undo = 3
         else:
-            if(state.plot == 1 and state.undo == 1):
+            if(self.plot == 1 and state.undo == 1):
                 state.undo = 0
-            elif(state.plot == 2 and state.undo == 2):
+            elif(self.plot == 2 and state.undo == 2):
                 state.undo = 0
-            elif(state.plot == 1 and state.undo == 3):
+            elif(self.plot == 1 and state.undo == 3):
                 state.undo = 2
             else:
                 state.undo = 1
@@ -411,8 +411,7 @@ class PlotSuperPixelMask(QWidget):
         self.setLayout(vlayout) 
     # Update the view, displaying the mask3d(if modified, shows the new mask)
     def callMouseEvent(self, event):
-        global currentPlot
-        currentPlot = 0
+        state.current_plot = 0
         mouse_event(event, 1)
     def UpdateView(self):
         if (not state.masks_empty):

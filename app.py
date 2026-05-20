@@ -36,8 +36,8 @@ from src.utils.image_utils import (
 )
 from src.models.tissue_config import materials, colors, dictTissues
 from src.models.segmentation_state import SegmentationState
-from functions import _Mode
-from functions import CustomDialog
+from src.utils.modes import _Mode
+from src.views.dialogs import CustomDialog
 # from src.views.dialogs import CustomDialog
 import copy
 from PIL import Image
@@ -84,17 +84,8 @@ def paintSuperPixel(x,y,segments, plot=int):
     
     state.masks = np.zeros_like(state.dicom_image_array, dtype="bool")
     # Store a copy of mask3d for rollback
-    state.previous_paints.append(copy.deepcopy(state.mask3d))
     segment_id = segments[int(y)][int(x)]
-
-    state.previous_segments["superpixel"].append(segment_id)
-    state.previous_segments["previous_identifier"].append(state.segmented_mask[int(y)][int(x)])
-    
-    # Verify if exists more than 10 copies, for delete the older
-    if(state.previous_paints.__len__() == 11):
-            state.previous_paints.__delitem__(0)
-            state.previous_segments["superpixel"].__delitem__(0)
-            state.previous_segments["previous_identifier"].__delitem__(0)
+    state.undo_stack.push(state.mask3d, segment_id, state.segmented_mask[int(y)][int(x)])
 
     if((plot == 1 and state.undo == 1) or(plot == 2 and state.undo == 2) or state.undo == 3):
         state.masks = np.ones_like(state.dicom_image_array, dtype="bool")
@@ -162,8 +153,8 @@ class PercentagesGraph(QWidget):
             totalpixels = state.area
             labels = []
             sizes = []
-            listKeys = list(state.dictTissues.keys())
-            listValues = list(state.dictTissues.values())
+            listKeys = list(dictTissues.keys())
+            listValues = list(dictTissues.values())
             for i in range(state.informacoes["tissue"].__len__()):
                 tissue = state.informacoes["tissue"][i]
                 identifier = state.informacoes["identifier"][i]
@@ -377,21 +368,20 @@ class MplToolbar(NavigationToolbar2QT):
     # Rollbacks a state of the paint, copying the saved mask to the mask3d
     # deleting the copied and updating the view to the new mask with rollback
     def back_paint(self):
-        # Checks if have backups of masks 3d to rollback
-        if(state.previous_paints.__len__() >= 1):  
-            # Copy the backup mask to the mask3d variable
-            state.mask3d = copy.deepcopy(state.previous_paints[(state.previous_paints.__len__()-1)])
-            # Delete the rollbacked mask
-            state.previous_paints.__delitem__(state.previous_paints.__len__() -1)
-            lastIndex = state.previous_segments["superpixel"].__len__()-1
-            state.segmented_mask[state.segments_global == state.previous_segments["superpixel"][lastIndex]] = state.previous_segments["previous_identifier"][lastIndex]
-            state.previous_segments["superpixel"].__delitem__(lastIndex)
-            state.previous_segments["previous_identifier"].__delitem__(lastIndex)
-            # Update the view
-            if(np.array_equal(state.segments_global, []) and not np.array_equal(state.mask3d, [])):
-                imageViewer.plotsuperpixelmask.showSavedMask()
-            else:
-                imageViewer.plotsuperpixelmask.UpdateView()
+        if len(state.undo_stack) < 1:
+            return
+
+        entry = state.undo_stack.pop()
+        if entry is None:
+            return
+
+        state.mask3d = entry.mask3d_snapshot
+        state.segmented_mask[state.segments_global == entry.segment_id] = entry.previous_identifier
+
+        if np.array_equal(state.segments_global, []) and not np.array_equal(state.mask3d, []):
+            imageViewer.plotsuperpixelmask.showSavedMask()
+        else:
+            imageViewer.plotsuperpixelmask.UpdateView()
 
 # Class that shows the painted image
 class PlotSuperPixelMask(QWidget):
@@ -728,8 +718,7 @@ class ImageViewer(QMainWindow):
         
     def open(self):
         """Open the interface to choose the file to display in the app"""
-        state.previous_segments = {"superpixel":[], "previous_identifier":[]}
-        state.previous_paints = []
+        state.undo_stack.clear()
         state.file_name = self.pathFile()
         if(state.file_name):
             state.superpixel_auth = False

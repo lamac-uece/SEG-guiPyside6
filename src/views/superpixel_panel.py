@@ -21,16 +21,21 @@ class QPaletteButton(QPushButton):
 class PlotSuperPixelMask(QWidget):
     """Painel que exibe a máscara pintada com os superpixels sobrepostos."""
 
-    def __init__(self, state: SegmentationState, mouse_event_cb, parent=None):
+    def __init__(self, state: SegmentationState, mouse_event_cb,
+                 on_back_paint=None, on_save_mask=None, parent=None):
         super().__init__(parent)
-        self._state = state
+        self._state          = state
         self._mouse_event_cb = mouse_event_cb
 
         self.view    = FigureCanvas(Figure())
         self.axes    = self.view.figure.subplots()
         self.axes.set_title("Máscara/SuperPixel")
-        self.toolbar = MplToolbar(self.view, self, plot=1, state=state)
-        self.im      = ""
+        self.toolbar = MplToolbar(
+            self.view, self, plot=1, state=state,
+            on_back_paint=on_back_paint,
+            on_save_mask=on_save_mask,
+        )
+        self.im = ""
 
         self.view.mpl_connect('button_press_event', self._on_click)
 

@@ -13,10 +13,13 @@ class CustomDialog(QDialog):
         self.buttonBox.rejected.connect(self.reject)
 
         layout = QVBoxLayout()
-        message = QLabel("<center>Deseja aproveitar a mascara</center>\n<center>do arquivo .csv atual?</center>")
+        message = QLabel(
+            "<center>Deseja aproveitar a mascara</center>\n"
+            "<center>do arquivo .csv atual?</center>"
+        )
         layout.addWidget(message)
         layout.addWidget(self.buttonBox)
         self.setLayout(layout)
 
     def show(self) -> bool:
-        return self.exec_()
+        return self.exec()

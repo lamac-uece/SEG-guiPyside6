@@ -40,15 +40,12 @@ class SegmentationState:
     selected_hu: list = field(default_factory=list)
 
     # ── pintura e undo ────────────────────────────────────────────────────────
-    """
-    Definir se variáveis abaixo serão utilizadas ou não:
     previous_paints: list = field(default_factory=list)
     previous_segments: dict = field(
         default_factory=lambda: {
             "superpixel": [], "previous_identifier": []
         }
     )
-    """
     superpixel_auth: bool = False
     undo: int = 0
     undo_stack: UndoStack = field(default_factory=UndoStack)

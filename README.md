@@ -272,3 +272,9 @@ Principais dependências e suas funções no projeto:
 | opencv-python | 4.9.0.80 | Processamento de imagem |
 | matplotlib | 3.8.4 | Visualização e canvas interativo |
 | scipy | 1.12.0 | Transformadas de distância e morfologia |
+
+## TODO
+
+* [] Corrigir continuade de segmentação após abrir um arquivo csv "encima" de uma mesma DICOM
+* [] Implementar segmentação semiautomática de tomo a partir de um modelo
+* [] Implementar salvamento de dados de porcentagem e estado global

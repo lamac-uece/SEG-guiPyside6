@@ -1,302 +1,274 @@
-# SuperSeg: Ferramenta de Segmentação Manual de Tomografias com Superpixels
-
-## 1. Visão Geral do Projeto
-
-SuperSeg é uma aplicação desktop desenvolvida em Python com o objetivo de **auxiliar na segmentação manual de tomografias computadorizadas (TC)** — especialmente cortes axiais no nível **L3** — utilizando **técnicas de superpixels** para facilitar e acelerar o processo de anotação para estudos de composição corporal.
-
-A interface gráfica permite ao usuário:
-
-- carregar arquivos DICOM,
-- visualizar e processar as imagens,
-- aplicar algoritmos como SLIC Superpixels, CLAHE, remoção de pele/objetos,
-- pintar regiões usando segmentação baseada em superpixels,
-- salvar segmentações manualmente no formato CSV (ground truth),
-- abrir segmentações anteriores para revisão ou edição.
-
-O software foi projetado para ser utilizado em laboratórios de pesquisa, hospitais e universidades que trabalham com análise de gordura visceral, gordura subcutânea e massa muscular em TC.
-
-## 2. Objetivo do Projeto
-
-O objetivo principal do SuperSeg é fornecer:
-
-- uma ferramenta estável, rápida e intuitiva
-- para gerar segmentações manuais que servirão como ground truths
-- para uso em validação de modelos de IA, processamento de imagens médicas e pesquisas científicas.
-
-O foco é reduzir esforços repetitivos na segmentação, oferecendo:
-- navegação fluida,
-- superpixels para delimitar automaticamente regiões homogêneas,
-- ferramentas visuais de apoio,
-- salvamento estruturado de dados.
-
-## 3. Principais Funcionalidades
-
-A interface gráfica do SuperSeg oferece diversas funções distribuídas em menus e atalhos. As principais incluem:
-
-### 3.1 Abertura e Visualização
-
-- Abrir imagens DICOM (Ctrl + O)
-- Visualização lado a lado (imagem original e imagem com superpixels)
-- Zoom e Pan interativos
-- Reset de zoom e navegação
-
-### 3.2 Segmentação Manual Baseada em Superpixels
-
-- Aplicação do algoritmo SLIC (Ctrl + Shift + S)
-- Pintura de superpixels clicando sobre eles
-- Alteração de cores associadas a cada tecido
-- Ferramenta de borracha para remover segmentações locais
-- Atalho de desfazer (Ctrl + Z) com histórico limitado por 10 ações
-
-### 3.3 Pré-Processamentos Disponíveis
-
-- Remove Objects (Ctrl + R): remove cama, lençóis e objetos externos
-- Remove Skin and Objects (Ctrl + Shift + R): remove objetos e também a pele
-- Hist CLAHE (Ctrl + C): realça detalhes por equalização adaptativa do histograma
-
-### 3.4 Salvamento e Carregamento de Segmentações
-
-- Exportar segmentação no formato .csv (Ctrl + S)
-- Visualização da segmentação sobre a imagem original
-- Reabrir arquivos .csv para análise
-- Combinar .csv com DICOM correspondente para edição posterior
-- Cálculo automático das porcentagens de tecido segmentado
-
-### 3.5 Configurações Internas
-
-Opção “Options” da barra de ferramentas:
-- Alterar número de superpixels
-- Ajustar parâmetros de processamento
-- Escolher pasta padrão de abertura
-- Escolher pasta padrão de salvamento
-
-## 4. Arquitetura do Projeto (Completa)
-
-A seguir, uma descrição aprofundada da implementação interna dos arquivos functions.py e app.py.
-
-### 4.1 Arquitetura Interna — Módulo functions.py
-
-functions.py contém toda a lógica científica do projeto: leitura, pré-processamento, segmentação e manipulação de máscaras binárias e multiclasses.
-
-#### 4.1.1 Processamento de Máscaras
-
-bitwise_minus(img1, img2)
-
-- Implementa a operação lógica img1 - img2 entre máscaras binárias.
-
-remove_small_CCs(mask, thres)
-
-- Remove componentes conectados com área inferior ao limiar thres:
-- reduz ruídos
-- remove pequenos objetos indesejados durante a segmentação
-
-find_extreme_points(img, thresh=None)
-
-- Localiza os pontos extremos (esquerda, direita, topo, base) da máscara.
-
-compose_muscle_mask(muscle, skmuscle, tol)
-
-- Combina máscara de músculo e músculo esquelético adicionando uma faixa superior para manter a coerência anatômica.
-
-#### 4.1.2 Segmentação por HU (Hounsfield Units)
-
-Dicionário materials
-
-Contém faixas HU de:
-
-- osso
-- músculo
-- músculo esquelético
-- gordura
-- gordura visceral
-- gordura intramuscular
-- ar
-
-tissue_segmentation(image, tissue)
-
-- Retorna máscara binária dos pixels cuja HU pertence ao tecido selecionado.
-
-select_RoI(image)
-
-- Remove cama e objetos externos mantendo apenas a maior componente conectada acima do ar.
-
-#### 4.1.3 Leitura e Conversão de DICOM
-
-dicom2array(dcm)
-
-- Detecta compressão (JPEG Lossless)
-- Descomprime via pylibjpeg se necessário
-- Converte pixel_array para HU usando Slope/Intercept
-
-ConvertToUint8(image)
-
-- Normaliza HU para faixa 0–255 para visualização.
-
-#### 4.1.4 Remoção de pele e objetos
-
-removeSkinAndObjects(image, m)
-
-Pipeline avançado:
-
-- Segmentação HU inicial
-- Cálculo de máscara do corpo
-- Transformada de distância (EDT)
-- Estimativa automática da espessura de pele (função do perímetro corporal)
-- Remoção adaptativa de gordura subcutânea
-- Refinamento morfológico (closing, fill holes, ecc.)
-- Subtração da pele da imagem original
-
-#### 4.1.5 Interface auxiliar
-
-CustomDialog
-
-- Caixa de diálogo usada ao carregar um CSV perguntando se o usuário deseja reaproveitar a máscara existente.
-
-### 4.2 Arquitetura Interna — Módulo app.py
-
-app.py implementa toda a interface gráfica utilizando PySide6, além do fluxo de segmentação manual baseado em superpixels e pintura.
-
-#### 4.2.1 PlotWidgetModify (painel de pré-processamento)
-
-Gerencia:
-
-- visão “Imagem Conferência”
-- aplicação de CLAHE
-- remoção de objetos
-- remoção de pele
-- reset da imagem
-
-Mantém sincronização com a imagem principal (dicom_image_array).
-
-#### 4.2.2 PlotSuperPixelMask (painel de pintura)
-
-Painel principal de segmentação manual:
-
-- exibe máscara colorida (mask3d)
-- exibe ou oculta limites dos superpixels
-- aplica SLIC
-- captura cliques do mouse
-- pinta superpixels inteiros
-- sincroniza com segmentedMask
-- exibe máscara salva ao abrir CSV
-
-É o coração visual da ferramenta.
-
-#### 4.2.3 Mouse Events e Pintura
-
-O app utiliza duas funções centrais:
-
-mouse_event(event, plot_id): Identifica:
-
-- botão pressionado
-- coordenadas do clique
-- painel associado
-- modo atual (pintura, borracha, visualizar superpixels)
-
-paintSuperPixel(event): Executa a lógica principal:
-
-- identifica superpixel clicado
-- pinta ou apaga toda a região
-- valida densidade HU se o filtro estiver ativado
-- atualiza máscara RGB (mask3d)
-- ajusta matriz segmentedMask
-- salva estado para permitir Ctrl+Z
-
-#### 4.2.4 PercentagesGraph
-
-Calcula automaticamente a área (%) segmentada por tecido selecionado:
-
-- gordura
-- músculo
-- osso
-- vísceras
-- etc.
-
-Mostra gráfico em janela separada.
-
-#### 4.2.5 Form (Configurações Internas)
-
-Permite alterar:
-
-- número de superpixels
-- compactness
-- sigma
-- parâmetros de remoção de pele
-- parâmetros de CLAHE
-
-Todas as mudanças são aplicadas dinamicamente.
-
-#### 4.2.6 MplToolbar (Toolbar personalizada)
-
-Adiciona:
-
-- Pan
-- Zoom
-- Home
-- Save
-- Undo (Back)
-- Clear (Remove superpixel)
-- Toggle Superpixel View
-- Informações adicionais na GUI
-
-#### 4.2.7 Classe ImageViewer (janela principal)
-
-Responsável por:
-
-- menus
-- atalhos
-- associação de cores a tecidos
-- abertura de DICOM/CSV
-- reconstrução de máscara salva
-- controle dos dois painéis (superpixels e imagem modificada)
-- salvamento com estrutura consistente
-
-O método open() é particularmente rico:
-
-Se for DICOM:
-
-- converte
-- aplica ROI
-- configura cores/tipos
-- atualiza HU de referência
-
-Se for CSV:
-
-- restaura máscara completa
-- restaura cores
-- restaura identificadores
-- restaura tecidos
-
-#### 4.2.8 Salvamento da máscara
-
-O botão Save salva:
-
-- segmentedMask completa
-- cores correspondentes
-- identificadores
-- tecidos
-- área total do ROI
-
-Formato compatível para reabertura e edição.
-
-#### 4.2.9 Execução
-
-```py
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    imageViewer = ImageViewer()
-    imageViewer.show()
-    sys.exit(app.exec())
+# SEG — Segmentador Manual de Imagens DICOM
+
+Ferramenta de segmentação manual de imagens tomográficas desenvolvida no **LAMAC (Laboratório de Métodos e Análise Computacional)** da UECE. Permite que pesquisadores delimitem e classifiquem tecidos corporais em imagens DICOM de forma interativa, gerando máscaras de segmentação exportáveis para análise posterior.
+
+---
+
+## Sumário
+
+- [Funcionalidades](#funcionalidades)
+- [Arquitetura](#arquitetura)
+- [Estrutura de pastas](#estrutura-de-pastas)
+- [Pipeline de execução](#pipeline-de-execução)
+- [Como executar](#como-executar)
+- [Testes](#testes)
+- [Requisitos](#requisitos)
+
+---
+
+## Funcionalidades
+
+- Leitura de imagens DICOM (`.dcm`), incluindo arquivos comprimidos em JPEG Lossless
+- Pré-processamento de imagem:
+  - Remoção de objetos externos (mesa, lençol)
+  - Remoção de pele
+  - Equalização adaptativa de histograma (CLAHE)
+- Segmentação por superpixels via algoritmo SLIC
+- Pintura manual interativa de regiões por tecido
+- Suporte a múltiplos tecidos por imagem: Gordura, Gordura Intramuscular, Gordura Visceral, Osso, Músculo, Órgão e Outros
+- Filtragem por densidade Hounsfield (HU) por tipo de tecido
+- Desfazer pinturas (undo) com histórico de até 15 entradas
+- Exportação e importação de máscaras em formato `.csv`
+- Visualização de percentuais de área por tecido segmentado
+- Configuração de diretórios padrão de abertura e salvamento
+
+---
+
+## Arquitetura
+
+O projeto segue a arquitetura **MVC em camadas**, separando completamente interface gráfica, lógica de negócio e dados:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                     Views (PySide6)                 │
+│  main_window · superpixel_panel · reference_panel   │
+│  toolbar · params_dialog · percentages_widget       │
+└──────────────────────┬──────────────────────────────┘
+                       │ eventos / callbacks
+┌──────────────────────▼──────────────────────────────┐
+│                   Controller                        │
+│                 main_controller                     │
+└───────┬──────────────┬──────────────────────────────┘
+        │              │
+┌───────▼──────┐ ┌─────▼────────────────────────────┐
+│    Models    │ │            Services              │
+│ segmentation │ │ dicom_service · image_processing │
+│    _state    │ │ mask_io · undo_manager           │
+│ tissue_config│ └──────────────────────────────────┘
+└──────────────┘
+        │
+┌───────▼──────┐
+│    Utils     │
+│ image_utils  │
+│    modes     │
+└──────────────┘
 ```
 
-## 5. Fluxo Geral de Uso
+**Models** — estruturas de dados e constantes de domínio (`SegmentationState`, `tissue_config`)
 
-1. Selecionar um arquivo DICOM
-2. Aplicar pré-processamentos opcionais
-3. Aplicar superpixels (SLIC)
-4. Escolher o tecido a ser segmentado
-5. Pintar regiões clicando nos superpixels
-6. Ajustar zoom/pan conforme necessário
-7. Salvar segmentação (CSV)
-8. Consultar estatísticas de porcentagens
-9. Opcionalmente reabrir o CSV para editar
+**Services** — lógica de negócio pura, sem dependência de UI (`dicom_service`, `image_processing`, `mask_io`, `undo_manager`)
+
+**Controllers** — intermediário entre view e services; único ponto que conhece ambos (`MainController`)
+
+**Views** — exclusivamente interface gráfica; não acessam services diretamente
+
+**Utils** — funções auxiliares genéricas de processamento de imagem
+
+---
+
+## Estrutura de pastas
+
+```
+SEG-guiPyside6/
+├── app.py                          # Entrypoint da aplicação
+├── requirements.txt                # Dependências de produção
+├── conftest.py                     # Configuração do pytest
+│
+├── assets/                         # Recursos estáticos da interface
+│   ├── icon.png
+│   └── trash.png
+│
+├── local/                          # Configuração local de máquina (gitignored)
+│   ├── defaultImageDir.txt
+│   └── defaultMaskDir.txt
+│
+├── src/
+│   ├── controllers/
+│   │   └── main_controller.py      # Coordena view ↔ services
+│   │
+│   ├── models/
+│   │   ├── segmentation_state.py   # Estado global encapsulado
+│   │   └── tissue_config.py        # Constantes de tecidos e HU
+│   │
+│   ├── services/
+│   │   ├── dicom_service.py        # Leitura e decompressão de DICOM
+│   │   ├── image_processing.py     # CLAHE, SLIC, remoção de pele
+│   │   ├── mask_io.py              # Leitura e escrita de máscaras CSV
+│   │   └── undo_manager.py         # Histórico de pinturas (UndoStack)
+│   │
+│   ├── utils/
+│   │   ├── image_utils.py          # Funções auxiliares de imagem
+│   │   └── modes.py                # Enum de modos da toolbar
+│   │
+│   └── views/
+│       ├── main_window.py          # Janela principal (ImageViewer)
+│       ├── superpixel_panel.py     # Painel de pintura com superpixels
+│       ├── reference_panel.py      # Painel de conferência da imagem
+│       ├── toolbar.py              # Toolbar matplotlib estendida
+│       ├── params_dialog.py        # Diálogo de parâmetros SLIC/CLAHE
+│       ├── percentages_widget.py   # Gráfico de percentuais por tecido
+│       └── dialogs.py              # Diálogos auxiliares
+│
+└── tests/
+    ├── unit/
+    │   ├── test_image_utils.py
+    │   ├── test_image_processing.py
+    │   └── test_mask_io.py
+    └── integration/
+        └── test_pipeline.py
+```
+
+---
+
+## Pipeline de execução
+
+O fluxo principal da ferramenta segue estas etapas:
+
+```
+1. Abertura
+   └── Arquivo .dcm  →  dicom_service.dicom2array()
+                    →  Escala HU aplicada (RescaleSlope + RescaleIntercept)
+
+2. Pré-processamento (opcional, aplicável em qualquer ordem)
+   ├── Remove Objects  →  image_processing.select_RoI()
+   ├── Remove Skin     →  image_processing.removeSkinAndObjects()
+   └── CLAHE           →  image_processing.apply_clahe()
+
+3. Superpixels
+   └── image_processing.compute_superpixels()  (algoritmo SLIC)
+       └── Parâmetros configuráveis: n_segments, sigma, compactness,
+           max_num_iter, min_size_factor, max_size_factor
+
+4. Pintura manual
+   ├── Clique na região  →  controller.paint_superpixel()
+   ├── Filtragem HU ativa →  aplica máscara de gordura ou músculo
+   ├── Undo (Port)        →  undo_manager.UndoStack.pop()
+   └── Undo por clique    →  modo Clear ativo na toolbar
+
+5. Exportação
+   └── Save  →  mask_io.save_mask()  →  arquivo .csv
+
+6. Reabertura de máscara
+   └── Arquivo .csv  →  mask_io.load_mask()
+                    →  controller.recovery_mask3d()
+```
+
+**Formato do arquivo `.csv` de máscara:**
+
+```
+linha 0..N-3  →  linhas da segmented_mask (inteiros separados por vírgula)
+linha N-2     →  informações dos tecidos: "r,g,b,identifier,tissue " por tecido
+linha N-1     →  área total em pixels
+```
+
+---
+
+## Como executar
+
+### Pré-requisitos
+
+- Python >= 3.10.9
+- pip
+
+### Instalação
+
+```bash
+# Clone o repositório
+git clone <url-do-repositorio>
+cd SEG-guiPyside6
+
+# Crie e ative o ambiente virtual
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Linux / macOS
+source venv/bin/activate
+
+# Instale as dependências
+pip install -r requirements.txt
+```
+
+### Execução
+
+```bash
+python app.py
+```
+
+### Uso básico
+
+1. **File → Open** — abre um arquivo `.dcm` ou uma máscara `.csv` salva anteriormente
+2. **View → Remove Objects** — remove mesa e objetos externos (opcional)
+3. **View → Remove Skin and Objects** — remove também a camada de pele (opcional)
+4. **View → Hist CLAHE** — aplica equalização de histograma (opcional)
+5. **View → SuperPixel** — gera a segmentação por superpixels
+6. Clique nas regiões da imagem para pintar o tecido atual
+7. Use o ícone de cor na toolbar superior para trocar de tecido
+8. **File → Save** ou `Ctrl+S` — exporta a máscara em `.csv`
+
+### Atalhos de teclado
+
+| Atalho | Ação |
+|--------|------|
+| `Ctrl+O` | Abrir arquivo |
+| `Ctrl+S` | Salvar máscara |
+| `Ctrl+Z` | Desfazer última pintura |
+| `Ctrl+C` | Aplicar CLAHE |
+| `Ctrl+Shift+S` | Gerar SuperPixel |
+| `Ctrl+T` | Toggle visualização de superpixels |
+| `Ctrl+R` | Remover objetos externos |
+| `Ctrl+Shift+R` | Remover pele e objetos |
+| `Ctrl+Shift+D` | Toggle filtragem por densidade HU |
+| `Ctrl+Q` | Sair |
+
+### Configuração de diretórios padrão
+
+Acesse **Options → Default Open Directory** e **Options → Default Save Directory** para configurar os diretórios padrão de abertura e salvamento. As preferências são salvas em `local/` e não são versionadas.
+
+---
+
+## Testes
+
+```bash
+# Instale as dependências de desenvolvimento
+pip install pytest
+
+# Todos os testes
+pytest tests/ -v
+
+# Apenas unitários
+pytest tests/unit/ -v
+
+# Apenas integração
+pytest tests/integration/ -v
+```
+
+Os testes de integração que dependem de um arquivo DICOM real (`test.dcm`) são automaticamente ignorados se o arquivo não estiver presente na raiz do projeto.
+
+---
+
+## Requisitos
+
+Principais dependências e suas funções no projeto:
+
+| Biblioteca | Versão | Uso |
+|---|---|---|
+| PySide6 | 6.6.3 | Interface gráfica |
+| numpy | 1.26.4 | Operações matriciais sobre imagens |
+| pydicom | 2.4.4 | Leitura de arquivos DICOM |
+| pylibjpeg | 1.4.0 | Decompressão JPEG Lossless |
+| scikit-image | 0.22.0 | SLIC, CLAHE, morfologia |
+| opencv-python | 4.9.0.80 | Processamento de imagem |
+| matplotlib | 3.8.4 | Visualização e canvas interativo |
+| scipy | 1.12.0 | Transformadas de distância e morfologia |

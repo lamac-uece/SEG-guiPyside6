@@ -2,7 +2,7 @@ import copy
 from dataclasses import dataclass, field
 import numpy as np
 
-MAX_HISTORY = 15
+MAX_HISTORY = 10
 
 @dataclass
 class UndoEntry:

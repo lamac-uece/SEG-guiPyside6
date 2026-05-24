@@ -1,4 +1,3 @@
-# src/services/mask_io.py
 import numpy as np
 
 

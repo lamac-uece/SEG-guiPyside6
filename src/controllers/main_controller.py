@@ -1,5 +1,6 @@
 import copy
 from os import path
+import os
 
 import numpy as np
 import pydicom
@@ -13,6 +14,8 @@ from src.services.image_processing import select_RoI
 from src.services.mask_io import load_mask, save_mask
 from src.services.undo_manager import UndoStack
 from src.utils.image_utils import ConvertToUint8, tissue_segmentation
+
+_LOCAL_DIR = "local"
 
 class MainController:
     def __init__(self, state: SegmentationState):
@@ -341,27 +344,29 @@ class MainController:
 
     def load_dirs(self) -> None:
         s = self._state
-        if path.exists("./defaultImageDir.txt"):
-            with open("./defaultImageDir.txt") as f:
-                s.open_dir = f.readline()
-        if path.exists("./defaultMaskDir.txt"):
-            with open("./defaultMaskDir.txt") as f:
-                s.save_dir = f.readline()
+        img_path  = path.join(_LOCAL_DIR, "defaultImageDir.txt")
+        mask_path = path.join(_LOCAL_DIR, "defaultMaskDir.txt")
+        if path.exists(img_path):
+            with open(img_path) as f:
+                s.open_dir = f.readline().strip()
+        if path.exists(mask_path):
+            with open(mask_path) as f:
+                s.save_dir = f.readline().strip()
 
     def set_default_open_dir(self, parent_widget) -> None:
-        from PySide6.QtWidgets import QFileDialog
         d = QFileDialog.getExistingDirectory(parent_widget)
         if d:
             self._state.open_dir = d
-            with open("./defaultImageDir.txt", "w") as f:
+            os.makedirs(_LOCAL_DIR, exist_ok=True)
+            with open(path.join(_LOCAL_DIR, "defaultImageDir.txt"), "w") as f:
                 f.write(d)
 
     def set_default_save_dir(self, parent_widget) -> None:
-        from PySide6.QtWidgets import QFileDialog
         d = QFileDialog.getExistingDirectory(parent_widget)
         if d:
             self._state.save_dir = d
-            with open("./defaultMaskDir.txt", "w") as f:
+            os.makedirs(_LOCAL_DIR, exist_ok=True)
+            with open(path.join(_LOCAL_DIR, "defaultMaskDir.txt"), "w") as f:
                 f.write(d)
 
     def _reset_toggle(self) -> None:

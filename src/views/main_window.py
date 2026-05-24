@@ -60,7 +60,7 @@ class ImageViewer(QMainWindow):
         self.setCentralWidget(central)
 
         self.setWindowTitle("LAMAC")
-        self.setWindowIcon(QPixmap("./icon.png"))
+        self.setWindowIcon(QPixmap("assets/icon.png"))
 
         self._create_actions()
         self._create_menus()

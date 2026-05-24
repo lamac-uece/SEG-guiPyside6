@@ -1,9 +1,35 @@
-images
+# ── Imagens e dados ───────────────────────────────────────────────────────────
+images/
 *.csv
-*dist
-*build
+
+# ── Build e distribuição ──────────────────────────────────────────────────────
+dist/
+build/
 *.spec
+
+# ── Configuração local de máquina ─────────────────────────────────────────────
+local/
 defaultImageDir.txt
 defaultMaskDir.txt
-__pycache__
-venv
+
+# ── Python cache ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Ambiente virtual ──────────────────────────────────────────────────────────
+venv/
+.venv/
+.env/
+env/
+
+# ── IDEs ──────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+
+# ── Sistema operacional ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

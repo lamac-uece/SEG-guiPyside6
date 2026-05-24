@@ -25,7 +25,7 @@ class MplToolbar(NavigationToolbar2QT):
             ('Pan',     'Pan axes with left mouse, zoom with right', 'move',                          'pan'),
             ('Zoom',    'Zoom to rectangle',                     'zoom_to_rect',                      'zoom'),
             ('Port',    'Back to the previous paint',            'back',                              'back_paint'),
-            ('Clear',   'Undo a specific paint',                 path.realpath(path.curdir) + "/trash", 'change_undo'),
+            ('Clear',   'Undo a specific paint',                 path.join(path.realpath(path.curdir), "assets", "trash"), 'change_undo'),
             ('Save',    'Save the current image',                'filesave',                          'save_mask'),
         )
         NavigationToolbar2QT.__init__(self, canvas_, parent_)

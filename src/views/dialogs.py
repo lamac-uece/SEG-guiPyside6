@@ -5,7 +5,7 @@ class CustomDialog(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("LAMAC")
-        self.setWindowIcon(QPixmap("./icon.png"))
+        self.setWindowIcon(QPixmap("assets/icon.png"))
 
         QBtn = QDialogButtonBox.Yes | QDialogButtonBox.No
         self.buttonBox = QDialogButtonBox(QBtn)

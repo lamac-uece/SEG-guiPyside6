@@ -13,6 +13,7 @@ from src.services.dicom_service import dicom2array
 from src.services.image_processing import select_RoI
 from src.services.mask_io import load_mask, save_mask
 from src.services.undo_manager import UndoStack
+from src.views.dialogs import CustomDialog
 from src.utils.image_utils import ConvertToUint8, tissue_segmentation
 
 _LOCAL_DIR = "local"
@@ -77,7 +78,6 @@ class MainController:
         v  = self._view
         ok = 0
         if s.csv_flag:
-            from src.views.dialogs import CustomDialog
             ok = CustomDialog().show()
         if ok:
             s.current_tissue = 1
@@ -87,6 +87,7 @@ class MainController:
                 int(s.informacoes["colors"][0][2]),
             ))
             s.segments_global = []
+            self._update_selected_hu()
             self.recovery_mask3d()
             s.masks_empty = False
         else:
@@ -124,7 +125,7 @@ class MainController:
             (s.segmented_mask.shape[0], s.segmented_mask.shape[1], 3),
             dtype="uint8"
         )
-        if s.file_name_global.split(".")[-1] == "dcm":
+        if not np.array_equal(s.dicom_image_array, []):
             s.mask3d[:, :, 0] = s.dicom_image_array
             s.mask3d[:, :, 1] = s.dicom_image_array
             s.mask3d[:, :, 2] = s.dicom_image_array

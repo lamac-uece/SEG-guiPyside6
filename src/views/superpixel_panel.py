@@ -47,11 +47,17 @@ class PlotSuperPixelMask(QWidget):
         self._state.current_plot = 0
         self._mouse_event_cb(event, 1)
 
+    def _masked_segments(self, s):
+        """Aplica máscara de HU sobre labels SLIC, devolvendo array int32"""
+        if np.array_equal(s.selected_hu, []):
+            return s.segments_global.astype(np.int32)
+        return (s.segments_global * s.selected_hu.astype(np.int32)).astype(np.int32)
+
     def UpdateView(self):
         s = self._state
         if not s.masks_empty:
             data = (
-                mark_boundaries(s.mask3d, s.segments_global * s.selected_hu)
+                mark_boundaries(s.mask3d, self._masked_segments(s))
                 if s.show_superpixel and not np.array_equal(s.segments_global, [])
                 else s.mask3d
             )
@@ -100,14 +106,15 @@ class PlotSuperPixelMask(QWidget):
         )
         self.axes.clear()
         self.axes.set_title("Máscara/SuperPixel")
+        masked = self._masked_segments(s)
         if not np.array_equal(s.mask3d, []):
             self.im = self.axes.imshow(
-                mark_boundaries(s.mask3d, s.segments_global * s.selected_hu)
+                mark_boundaries(s.mask3d, masked)
             )
         else:
             self.im = self.axes.imshow(
                 mark_boundaries(s.dicom_image_array / 255,
-                                s.segments_global * s.selected_hu),
+                                masked),
                 cmap='gray'
             )
         self.view.draw()

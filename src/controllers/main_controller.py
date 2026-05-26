@@ -394,3 +394,5 @@ class MainController:
             s.selected_hu = s.fat_hu
         elif tissue in [5]:
             s.selected_hu = s.muscle_hu
+        else:
+            s.selected_hu = np.ones(s.dicom_image_array.shape, dtype=bool)

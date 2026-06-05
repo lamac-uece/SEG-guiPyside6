@@ -67,8 +67,8 @@ class MainController:
         s.muscle_hu   = tissue_segmentation(roi, "muscle")
         s.fat_hu      = tissue_segmentation(roi, "fat")
         s.selected_hu = np.ones(s.dicom_image_array.shape)
+        s.area = int(np.count_nonzero(ConvertToUint8(roi)))
         s.dicom_image_array = ConvertToUint8(s.dicom_image_array)
-        s.area = int(np.count_nonzero(ConvertToUint8(select_RoI(s.dicom_image_array))))
         self._view.plotwidget_modify.on_change()
         self._ask_initial_tissue()
         s.csv_flag = False

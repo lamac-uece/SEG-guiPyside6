@@ -170,7 +170,29 @@ class ImageViewer(QMainWindow):
         self._controller.set_default_save_dir(self)
 
     def about(self):
-        QMessageBox.about(self, "LAMAC", "<p>Segmentador Manual!!!</p>")
+        about_text = """
+        <h3><b>SEG — Segmentador Manual de Imagens DICOM</b></h3>
+        <p>Desenvolvido no <b>LAMAC</b> (Laboratório de Métodos e Análise Computacional - UECE).</p>
+        
+        <p>Esta ferramenta permite a segmentação manual e interativa de tecidos corporais 
+        em imagens tomográficas (DICOM), gerando máscaras exportáveis para análises subsequentes.</p>
+        
+        <hr>
+        
+        <h4><b>Fluxo de Execução Recomendado:</b></h4>
+        <ol>
+            <li><b>Abrir Imagem:</b> Vá em <code>File &rarr; Open</code> (Ctrl+O) e selecione o arquivo <code>.dcm</code>.</li>
+            <li><b>Pré-processamento (Opcional):</b> Utilize o menu <code>View</code> para remover objetos externos, pele ou aplicar a equalização adaptativa (CLAHE).</li>
+            <li><b>Gerar Superpixels:</b> Ative <code>View &rarr; SuperPixel</code> (Ctrl+Shift+S) para subdividir a imagem usando o algoritmo SLIC.</li>
+            <li><b>Segmentação/Pintura:</b> Selecione o tecido desejado na barra de ferramentas e clique nas regiões para colorir. Se preferir, ative a filtragem por densidade HU.</li>
+            <li><b>Exportar:</b> Salve seu progresso em <code>File &rarr; Save</code> (Ctrl+S) para gerar o arquivo de máscara em <code>.csv</code>.</li>
+        </ol>
+        
+        <hr>
+        <p><small><b>Tecnologias principais:</b> PySide6, Scikit-Image, OpenCV, NumPy e PyDicom.</small></p>
+        """
+        
+        QMessageBox.about(self, "Sobre o SEG", about_text)
 
     def _create_actions(self):
         c = self._controller
@@ -201,9 +223,9 @@ class ImageViewer(QMainWindow):
 
         view_menu = QMenu("&View", self)
         for act in [
-            self.superpixelAct, self.toggleDensityAct, self.toggleSuperpixelAct,
-            self.claheAct, self.originalImageAct, self.removeObjectsAct,
-            self.removeSkinAct, self.backPaintAct, self.calculatePercentagesAct,
+            self.originalImageAct, self.removeObjectsAct, self.removeSkinAct,
+            self.claheAct, self.superpixelAct, self.toggleDensityAct,
+            self.toggleSuperpixelAct, self.backPaintAct, self.calculatePercentagesAct,
         ]:
             view_menu.addAction(act)
 

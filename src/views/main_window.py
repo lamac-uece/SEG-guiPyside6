@@ -3,11 +3,12 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QAction, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QColorDialog, QFileDialog, QHBoxLayout,
-    QLabel, QMainWindow, QMenu, QMessageBox, QVBoxLayout, QWidget,
+    QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox, QVBoxLayout, QWidget,
 )
 
 from src.models.segmentation_state import SegmentationState
 from src.controllers.main_controller import MainController
+from src.views.dialogs import MLReviewDialog
 from src.views.params_dialog import ParamsDialog
 from src.views.percentages_widget import PercentagesGraph
 from src.views.reference_panel import PlotWidgetModify
@@ -146,6 +147,64 @@ class ImageViewer(QMainWindow):
         s.show_superpixel = not s.show_superpixel
         self.plotsuperpixelmask.UpdateView()
 
+    def runAutoSegmentation(self):
+        """
+        Fluxo completo da segmentação automática:
+        1. exige uma imagem DICOM carregada (aviso caso contrário);
+        2. pergunta qual tecido segmentar — só lista tecidos com modelo
+           efetivamente carregado (ver `available_ml_tissues`);
+        3. pergunta a cor do tecido, só se ele ainda não tiver uma
+           associada nesta sessão — senão reaproveita a cor existente;
+        4. roda o modelo e exibe o resultado sobreposto à imagem, sem
+           apagar nenhum tecido já segmentado antes;
+        5. pergunta a decisão do usuário (Aceitar / Editar / Rejeitar) e
+           delega ao controller. O usuário pode repetir esse fluxo em
+           seguida para outro tecido, normalmente.
+        """
+        s = self._state
+        c = self._controller
+
+        if np.array_equal(s.dicom_image_array, []):
+            QMessageBox.warning(
+                self, "Aviso",
+                "Carregue uma imagem DICOM antes de usar a Segmentação Automática."
+            )
+            return
+
+        tissues = c.available_ml_tissues()
+        if not tissues:
+            QMessageBox.warning(
+                self, "Aviso", "Nenhum modelo de segmentação automática está carregado."
+            )
+            return
+
+        tissue, confirmed = QInputDialog.getItem(
+            self, "Segmentação Automática", "Tecido a segmentar", tissues, 0, False
+        )
+        if not confirmed:
+            return
+
+        color = None
+        if not c.tissue_has_color(tissue):
+            qc = QColorDialog.getColor(Qt.yellow, self, f"Cor para '{tissue}'")
+            if not qc.isValid():
+                return
+            color = qc
+
+        ok = c.run_ml_segmentation(tissue, color)
+        if not ok:
+            return
+
+        choice = MLReviewDialog(tissue, self).show()
+        if choice == "accept":
+            c.accept_ml_segmentation()
+        elif choice == "edit":
+            c.edit_ml_segmentation()
+        else:
+            # "reject" ou diálogo fechado sem escolha explícita:
+            # por segurança, não deixamos uma proposta pendente sem decisão.
+            c.reject_ml_segmentation()
+
     def calculatePercentages(self):
         self.graph = PercentagesGraph(self._state)
         self.graph.calculatePercentages()
@@ -202,6 +261,7 @@ class ImageViewer(QMainWindow):
         self.exitAct                 = QAction("E&xit",                   self, shortcut="Ctrl+Q",       triggered=self.close)
         self.claheAct                = QAction("&Hist CLAHE",             self, shortcut="Ctrl+C",       triggered=self.HistMethodCLAHE)
         self.superpixelAct           = QAction("&SuperPixel",             self, shortcut="Ctrl+Shift+S", triggered=self.SuperPixel)
+        self.autoSegmentAct          = QAction("&Segmentação Automática", self, shortcut="Ctrl+Shift+A", triggered=self.runAutoSegmentation)
         self.toggleDensityAct        = QAction("&Toggle RD check",        self, shortcut="Ctrl+Shift+D", triggered=self.toggleRadioDensityCheck)
         self.originalImageAct        = QAction("&Original Image",         self,                          triggered=self.OriginalImage)
         self.removeObjectsAct        = QAction("&Remove Objects",         self, shortcut="Ctrl+R",       triggered=self.RemoveObjects)
@@ -226,7 +286,7 @@ class ImageViewer(QMainWindow):
         view_menu = QMenu("&View", self)
         for act in [
             self.originalImageAct, self.removeObjectsAct, self.removeSkinAct,
-            self.claheAct, self.superpixelAct, self.toggleDensityAct,
+            self.claheAct, self.superpixelAct, self.autoSegmentAct, self.toggleDensityAct,
             self.toggleSuperpixelAct, self.backPaintAct, self.calculatePercentagesAct,
         ]:
             view_menu.addAction(act)

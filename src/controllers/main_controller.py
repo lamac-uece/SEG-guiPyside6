@@ -12,6 +12,9 @@ from src.models.tissue_config import dictTissues
 from src.services.dicom_service import dicom2array, get_dicom_identifier
 from src.services.image_processing import select_RoI
 from src.services.mask_io import load_mask, save_mask
+from src.services.ml_segmentation import (
+    MLSegmentationError, available_tissues, predict_mask,
+)
 from src.services.undo_manager import UndoStack
 from src.views.dialogs import CustomDialog
 from src.utils.image_utils import ConvertToUint8, tissue_segmentation
@@ -400,3 +403,166 @@ class MainController:
             s.selected_hu = s.muscle_hu
         else:
             s.selected_hu = np.ones(s.dicom_image_array.shape, dtype=bool)
+
+    # ── segmentação automática ────────────────────────────────────────────────
+
+    def available_ml_tissues(self) -> list:
+        """
+        Tecidos disponíveis para segmentação automática — só os que têm
+        modelo efetivamente carregado (ver `ml_segmentation.load_all_models`,
+        chamado no startup em app.py). Nunca inclui um tecido "registrado
+        mas sem modelo carregado", pra evitar oferecer uma opção que vai
+        falhar na hora de rodar.
+        """
+        return available_tissues()
+
+    def tissue_has_color(self, tissue_key: str) -> bool:
+        """
+        Indica se `tissue_key` já tem uma cor associada nesta sessão
+        (de pintura manual anterior ou de uma segmentação automática
+        anterior). Se True, a view deve pular a etapa de escolha de cor
+        e reaproveitar a cor existente — evita o mesmo tecido aparecer
+        com cores diferentes na mesma máscara.
+        """
+        return dictTissues[tissue_key] in self._state.informacoes["tissue"]
+
+    def _ensure_tissue_registered(self, tissue_key: str, color=None) -> int:
+        """
+        Garante que `tissue_key` existe em `informacoes`, retornando seu
+        índice 1-based (mesmo valor usado em `segmented_mask`).
+
+        Se o tecido já estiver registrado, `color` é ignorado e a cor
+        existente é reaproveitada. Se ainda não estiver, `color` é
+        obrigatório (a view deve ter perguntado antes, ver `tissue_has_color`).
+        """
+        s = self._state
+        tissue_id = dictTissues[tissue_key]
+        if tissue_id in s.informacoes["tissue"]:
+            return s.informacoes["tissue"].index(tissue_id) + 1
+
+        if color is None:
+            raise ValueError(
+                f"Tecido '{tissue_key}' ainda não registrado — é necessário informar uma cor."
+            )
+        size = len(s.informacoes["colors"])
+        s.informacoes["colors"].append(np.array([color.red(), color.green(), color.blue()]))
+        s.informacoes["identifier"].append(size + 1)
+        s.informacoes["tissue"].append(tissue_id)
+        return size + 1
+
+    def run_ml_segmentation(self, tissue_key: str, color=None) -> bool:
+        """
+        Executa a segmentação automática para `tissue_key` e aplica o
+        resultado como uma proposta PENDENTE: os pixels já aparecem
+        pintados na máscara — de forma ADITIVA, sem apagar nenhum tecido
+        já segmentado (manualmente ou por uma rodada anterior de
+        segmentação automática) — mas o estado anterior fica salvo em
+        `s.ml_snapshot` até o usuário decidir, via `accept_ml_segmentation`,
+        `edit_ml_segmentation` ou `reject_ml_segmentation`.
+
+        `color` só é usado (e obrigatório) se `tissue_key` ainda não tiver
+        cor associada — ver `tissue_has_color`.
+
+        Retorna True se a proposta foi gerada, False se não havia imagem
+        carregada ou se a inferência falhou (nesse caso uma mensagem de
+        erro já foi exibida ao usuário).
+        """
+        s = self._state
+        if np.array_equal(s.dicom_image_array, []):
+            return False
+
+        try:
+            predicted = predict_mask(s.dicom_image_array, tissue_key)
+        except MLSegmentationError as e:
+            QMessageBox.critical(
+                self._view, "Erro na segmentação automática", str(e)
+            )
+            return False
+
+        # snapshot do estado mutável anterior — permite "Rejeitar" sem
+        # perder nada que já estava segmentado antes desta rodada.
+        s.ml_snapshot = {
+            "segmented_mask": copy.deepcopy(s.segmented_mask),
+            "mask3d":         copy.deepcopy(s.mask3d),
+            "informacoes":    copy.deepcopy(s.informacoes),
+            "area":           s.area,
+            "masks_empty":    s.masks_empty,
+            "current_tissue": s.current_tissue,
+        }
+
+        # inicializa apenas se ainda não existir — NUNCA zera um
+        # segmented_mask/mask3d que já tenha conteúdo de antes.
+        if np.array_equal(s.segmented_mask, []):
+            s.segmented_mask = np.zeros_like(s.dicom_image_array, dtype="uint8")
+        if s.masks_empty:
+            s.mask3d = np.zeros(
+                (s.dicom_image_array.shape[0], s.dicom_image_array.shape[1], 3),
+                dtype="uint8",
+            )
+            s.mask3d[:, :, 0] = s.dicom_image_array
+            s.mask3d[:, :, 1] = s.dicom_image_array
+            s.mask3d[:, :, 2] = s.dicom_image_array
+            s.masks_empty = False
+
+        tissue_index = self._ensure_tissue_registered(tissue_key, color)
+        tissue_color = s.informacoes["colors"][tissue_index - 1]
+
+        # escreve só nos pixels preditos — todo o resto de segmented_mask
+        # (outros tecidos já segmentados) permanece intocado.
+        s.segmented_mask[predicted] = tissue_index
+        s.mask3d[:, :, 0] = np.where(predicted, tissue_color[0], s.mask3d[:, :, 0])
+        s.mask3d[:, :, 1] = np.where(predicted, tissue_color[1], s.mask3d[:, :, 1])
+        s.mask3d[:, :, 2] = np.where(predicted, tissue_color[2], s.mask3d[:, :, 2])
+
+        s.current_tissue = tissue_index
+        s.ml_pending = True
+        self._view.plotsuperpixelmask.showSavedMask()
+        return True
+
+    def accept_ml_segmentation(self) -> None:
+        """
+        'Aceitar': incorpora a proposta ao estado de segmentação em
+        memória — igual a uma pintura manual. NÃO salva em .csv (isso é
+        feito à parte, via File → Save), justamente para permitir
+        encadear várias segmentações automáticas de tecidos diferentes
+        antes de salvar.
+        """
+        self._state.ml_pending  = False
+        self._state.ml_snapshot = {}
+
+    def edit_ml_segmentation(self) -> None:
+        """
+        'Editar': aceita a proposta como ponto de partida e já prepara a
+        imagem para correção manual, gerando os superpixels — o usuário
+        cai direto no modo de pintura, sem precisar acionar SuperPixel
+        manualmente depois.
+        """
+        self._state.ml_pending  = False
+        self._state.ml_snapshot = {}
+        self._undo_stack.clear()
+        self.apply_superpixel()
+
+    def reject_ml_segmentation(self) -> None:
+        """'Rejeitar': descarta a proposta, restaurando o estado anterior a ela."""
+        s = self._state
+        if not s.ml_pending:
+            return
+        snap = s.ml_snapshot
+
+        s.segmented_mask = snap.get("segmented_mask", [])
+        s.mask3d         = snap.get("mask3d", [])
+        s.informacoes    = snap.get(
+            "informacoes", {"colors": [], "identifier": [], "tissue": []}
+        )
+        s.area           = snap.get("area", s.area)
+        s.masks_empty    = snap.get("masks_empty", True)
+        s.current_tissue = snap.get("current_tissue", 0)
+
+        s.ml_pending  = False
+        s.ml_snapshot = {}
+
+        if s.masks_empty:
+            self._view.plotsuperpixelmask.im = ""
+            self._view.plotsuperpixelmask.UpdateView()
+        else:
+            self._view.plotsuperpixelmask.showSavedMask()

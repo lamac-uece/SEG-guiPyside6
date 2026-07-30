@@ -2,6 +2,10 @@
 images/
 *.csv
 
+# ── Modelos de segmentação automática (binários grandes; distribuir separadamente, ex. Git LFS) ──
+models/*.keras
+models/*.h5
+
 # ── Build e distribuição ──────────────────────────────────────────────────────
 dist/
 build/

@@ -139,8 +139,8 @@ class ImageViewer(QMainWindow):
     def toggleSuperPixelView(self):
         s = self._state
         if not s.toggle_available:
-            QMessageBox.warning(self, "Aviso",
-                                "Você precisa aplicar o SuperPixel antes de usar o Toggle.")
+            QMessageBox.warning(self, "Warning",
+                                "You need to apply SuperPixel before using Toggle.")
             return
         s.superpixel_auth = not s.superpixel_auth
         s.show_superpixel = not s.show_superpixel
@@ -152,7 +152,9 @@ class ImageViewer(QMainWindow):
         self.graph.show()
 
     def changeOptions(self):
-        ParamsDialog(self._state, self).exec()
+        if ParamsDialog(self._state, self).exec():
+            # Cor/grossura/opacidade da malha não exigem recomputar o SLIC
+            self.plotsuperpixelmask.UpdateView()
 
     def alternar(self):
         s = self._state

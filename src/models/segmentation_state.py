@@ -63,6 +63,13 @@ class SegmentationState:
     clip_limit: float = 0.03
     nbins: int = 256
 
+    # ── aparência da malha do SuperPixel ────────────────────────────────────────
+    mesh_color: tuple = (0.0, 0.0, 1.0)
+    # Grossura/estilo do contorno: 'outer' | 'inner' | 'thick'.
+    mesh_mode: str = "outer"
+    # Opacidade (0.0 = transparente, 1.0 = opaca).
+    mesh_opacity: float = 0.75
+
     # ── UI ────────────────────────────────────────────────────────────────────
     current_plot: int = 0
     show_superpixel: bool = True

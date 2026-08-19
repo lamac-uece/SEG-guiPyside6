@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from src.models.segmentation_state import SegmentationState
 from src.models.tissue_config import dictTissues
-from src.services.dicom_service import dicom2array
+from src.services.dicom_service import dicom2array, get_dicom_identifier
 from src.services.image_processing import select_RoI
 from src.services.mask_io import load_mask, save_mask
 from src.services.undo_manager import UndoStack
@@ -41,7 +41,7 @@ class MainController:
     def _open_csv(self, file_path: str) -> None:
         s = self._state
         s.csv_flag = True
-        s.segmented_mask, s.informacoes, s.area = load_mask(file_path)
+        s.segmented_mask, s.informacoes, s.area, s.csv_source_id = load_mask(file_path)
         s.dicom_image_array = []
         s.masks_empty    = False
         s.current_tissue = 1
@@ -63,6 +63,7 @@ class MainController:
             QMessageBox.critical(self._view, "Erro",
                                  "Não foi possível ler o arquivo DICOM.")
             return
+        s.dicom_source_id = get_dicom_identifier(dcm, file_path)
         roi           = select_RoI(s.dicom_image_array)
         s.muscle_hu   = tissue_segmentation(roi, "muscle")
         s.fat_hu      = tissue_segmentation(roi, "fat")
@@ -77,7 +78,7 @@ class MainController:
         s  = self._state
         v  = self._view
         ok = 0
-        if s.csv_flag:
+        if s.csv_flag and s.csv_source_id and s.csv_source_id == s.dicom_source_id:
             ok = CustomDialog().show()
         if ok:
             s.current_tissue = 1
@@ -234,13 +235,15 @@ class MainController:
             filter="csv(*.csv)"
         )
         if file_path:
-            save_mask(file_path, s.segmented_mask, s.informacoes, s.area)
+            save_mask(file_path, s.segmented_mask, s.informacoes, s.area,
+                      s.dicom_source_id)
 
     def save_mask_file(self, file_path: str) -> None:
         """Salva diretamente num caminho conhecido (uso programático)."""
         s = self._state
         if not np.array_equal(s.segmented_mask, []):
-            save_mask(file_path, s.segmented_mask, s.informacoes, s.area)
+            save_mask(file_path, s.segmented_mask, s.informacoes, s.area,
+                      s.dicom_source_id)
 
     def apply_clahe(self) -> None:
         s = self._state

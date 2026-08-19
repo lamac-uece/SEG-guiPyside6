@@ -10,6 +10,8 @@ class SegmentationState:
     file_name_global: str = ""
     
     csv_flag: bool = False
+    csv_source_id: str = ""
+    dicom_source_id: str = ""
     save_dir: str = ""
     open_dir: str = ""
 

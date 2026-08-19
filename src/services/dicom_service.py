@@ -1,4 +1,18 @@
+import os
 import numpy as np
+
+def get_dicom_identifier(dicom, file_path: str) -> str:
+    """
+    Retorna um identificador único da imagem DICOM, usado para verificar
+    se uma máscara .csv salva anteriormente corresponde ao arquivo aberto.
+
+    Usa o SOPInstanceUID quando disponível; caso contrário, recorre ao
+    caminho absoluto do arquivo.
+    """
+    sop_uid = getattr(dicom, "SOPInstanceUID", None)
+    if sop_uid:
+        return str(sop_uid)
+    return os.path.abspath(file_path)
 
 def _decompress_if_needed(dicom) -> bool:
     """

@@ -29,10 +29,11 @@ def test_csv_roundtrip_preserves_mask():
         path = f.name
     try:
         save_mask(path, mask, informacoes, area)
-        loaded_mask, loaded_info, loaded_area = load_mask(path)
+        loaded_mask, loaded_info, loaded_area, loaded_source_id = load_mask(path)
 
         assert np.array_equal(mask, loaded_mask)
         assert loaded_area == area
+        assert loaded_source_id == ""
         assert loaded_info["tissue"] == informacoes["tissue"]
         assert loaded_info["identifier"] == informacoes["identifier"]
         for orig, loaded in zip(informacoes["colors"], loaded_info["colors"]):
@@ -55,7 +56,7 @@ def test_csv_roundtrip_multi_tissue():
         path = f.name
     try:
         save_mask(path, mask, informacoes, area=500)
-        loaded_mask, loaded_info, _ = load_mask(path)
+        loaded_mask, loaded_info, _, _ = load_mask(path)
         assert np.array_equal(mask, loaded_mask)
         assert len(loaded_info["colors"]) == 4
     finally:
@@ -104,7 +105,7 @@ def test_clahe_superpixel_pipeline():
         path = f.name
     try:
         save_mask(path, segmented_mask, informacoes, area)
-        loaded_mask, loaded_info, loaded_area = load_mask(path)
+        loaded_mask, loaded_info, loaded_area, _ = load_mask(path)
 
         assert np.array_equal(segmented_mask, loaded_mask)
         assert loaded_area == area

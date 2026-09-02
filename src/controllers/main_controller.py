@@ -7,13 +7,14 @@ import pydicom
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
+from src.models.ml_tissue_config import MODE_MODEL
 from src.models.segmentation_state import SegmentationState
 from src.models.tissue_config import dictTissues
 from src.services.dicom_service import dicom2array, get_dicom_identifier
 from src.services.image_processing import select_RoI
 from src.services.mask_io import load_mask, save_mask
 from src.services.ml_segmentation import (
-    MLSegmentationError, available_tissues, predict_mask,
+    MLSegmentationError, available_tissues, predict_mask, predict_masks,
 )
 from src.services.undo_manager import UndoStack
 from src.views.dialogs import CustomDialog
@@ -408,13 +409,17 @@ class MainController:
 
     def available_ml_tissues(self) -> list:
         """
-        Tecidos disponíveis para segmentação automática — só os que têm
-        modelo efetivamente carregado (ver `ml_segmentation.load_all_models`,
+        Tecidos disponíveis para o modo Semi-Auto — só os que têm modelo
+        efetivamente carregado (ver `ml_segmentation.load_all_models`,
         chamado no startup em app.py). Nunca inclui um tecido "registrado
         mas sem modelo carregado", pra evitar oferecer uma opção que vai
         falhar na hora de rodar.
         """
-        return available_tissues()
+        return available_tissues("semi_auto")
+
+    def available_ml_batch_tissues(self) -> list:
+        """Tecidos disponíveis para o modo Auto (ver `ml_tissue_config.MODE_MODEL`)."""
+        return available_tissues("auto")
 
     def tissue_has_color(self, tissue_key: str) -> bool:
         """
@@ -450,34 +455,50 @@ class MainController:
         s.informacoes["tissue"].append(tissue_id)
         return size + 1
 
-    def run_ml_segmentation(self, tissue_key: str, color=None) -> bool:
+    def predict_ml_single(self, tissue_key: str) -> np.ndarray:
         """
-        Executa a segmentação automática para `tissue_key` e aplica o
-        resultado como uma proposta PENDENTE: os pixels já aparecem
-        pintados na máscara — de forma ADITIVA, sem apagar nenhum tecido
-        já segmentado (manualmente ou por uma rodada anterior de
+        Roda a inferência para 1 tecido — modo Semi-Auto. Chamada pura
+        (só lê `dicom_image_array`, não mexe em mais nada do estado nem na
+        view): é o que roda dentro do `InferenceWorker`, numa thread
+        separada, então não pode tocar em widgets. Quem aplica o
+        resultado ao estado é `apply_ml_prediction`, na thread principal.
+
+        Levanta MLSegmentationError se não houver imagem carregada ou se a
+        inferência falhar.
+        """
+        s = self._state
+        if np.array_equal(s.dicom_image_array, []):
+            raise MLSegmentationError("Nenhuma imagem DICOM carregada.")
+        return predict_mask(s.dicom_image_array, tissue_key)
+
+    def predict_ml_batch(self, tissues: list) -> dict:
+        """
+        Idem `predict_ml_single`, para o modo Auto: roda a inferência
+        multiclasse UMA VEZ (modelo de `MODE_MODEL["auto"]`) e devolve a
+        máscara predita para cada tecido pedido em `tissues`. Também é uma
+        chamada pura, feita para rodar dentro do worker.
+        """
+        s = self._state
+        if np.array_equal(s.dicom_image_array, []):
+            raise MLSegmentationError("Nenhuma imagem DICOM carregada.")
+        all_predictions = predict_masks(MODE_MODEL["auto"], s.dicom_image_array)
+        return {t: all_predictions[t] for t in tissues if t in all_predictions}
+
+    def apply_ml_prediction(self, tissue_key: str, predicted: np.ndarray, color=None) -> None:
+        """
+        Aplica uma máscara já predita (por `predict_ml_single` ou
+        `predict_ml_batch`) como uma proposta PENDENTE: os pixels já
+        aparecem pintados na máscara — de forma ADITIVA, sem apagar nenhum
+        tecido já segmentado (manualmente ou por uma rodada anterior de
         segmentação automática) — mas o estado anterior fica salvo em
         `s.ml_snapshot` até o usuário decidir, via `accept_ml_segmentation`,
         `edit_ml_segmentation` ou `reject_ml_segmentation`.
 
         `color` só é usado (e obrigatório) se `tissue_key` ainda não tiver
-        cor associada — ver `tissue_has_color`.
-
-        Retorna True se a proposta foi gerada, False se não havia imagem
-        carregada ou se a inferência falhou (nesse caso uma mensagem de
-        erro já foi exibida ao usuário).
+        cor associada — ver `tissue_has_color`. Mexe em widgets (view) —
+        só pode rodar na thread principal.
         """
         s = self._state
-        if np.array_equal(s.dicom_image_array, []):
-            return False
-
-        try:
-            predicted = predict_mask(s.dicom_image_array, tissue_key)
-        except MLSegmentationError as e:
-            QMessageBox.critical(
-                self._view, "Erro na segmentação automática", str(e)
-            )
-            return False
 
         # snapshot do estado mutável anterior — permite "Rejeitar" sem
         # perder nada que já estava segmentado antes desta rodada.
@@ -517,6 +538,27 @@ class MainController:
         s.current_tissue = tissue_index
         s.ml_pending = True
         self._view.plotsuperpixelmask.showSavedMask()
+
+    def run_ml_segmentation(self, tissue_key: str, color=None) -> bool:
+        """
+        Versão SÍNCRONA (bloqueia a UI) de predict_ml_single +
+        apply_ml_prediction — mantida como forma direta de rodar o modo
+        Semi-Auto (usada por testes e por quem não precisar do worker
+        assíncrono). O fluxo da UI (`main_window.runSemiAutoSegmentation`)
+        usa o worker em vez desta função, para não travar a interface.
+
+        Retorna True se a proposta foi gerada, False se não havia imagem
+        carregada ou se a inferência falhou (nesse caso uma mensagem de
+        erro já foi exibida ao usuário).
+        """
+        try:
+            predicted = self.predict_ml_single(tissue_key)
+        except MLSegmentationError as e:
+            QMessageBox.critical(
+                self._view, "Erro na segmentação automática", str(e)
+            )
+            return False
+        self.apply_ml_prediction(tissue_key, predicted, color)
         return True
 
     def accept_ml_segmentation(self) -> None:

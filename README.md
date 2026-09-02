@@ -25,6 +25,10 @@ Ferramenta de segmentação manual de imagens tomográficas desenvolvida no **LA
   - Equalização adaptativa de histograma (CLAHE)
 - Segmentação por superpixels via algoritmo SLIC
 - Pintura manual interativa de regiões por tecido
+- Segmentação automática assistida por modelos de ML (ONNX), em dois modos:
+  - **Semi-Auto** — roda 1 tecido por vez, sob demanda
+  - **Auto** — roda 1 modelo multiclasse, propondo os 4 tecidos de uma vez
+  - Em ambos os modos, cada proposta é revisável (Aceitar / Editar / Rejeitar) antes de virar segmentação definitiva
 - Suporte a múltiplos tecidos por imagem: Gordura, Gordura Intramuscular, Gordura Visceral, Osso, Músculo, Órgão e Outros
 - Filtragem por densidade Hounsfield (HU) por tipo de tecido
 - Desfazer pinturas (undo) com histórico de até 15 entradas
@@ -92,19 +96,28 @@ SEG-guiPyside6/
 │   ├── defaultImageDir.txt
 │   └── defaultMaskDir.txt
 │
+├── models/                          # Pesos ONNX dos modelos de ML (gitignored)
+│   ├── unet_all.onnx                # Semi-Auto — UNet simples, multiclasse
+│   └── r2_unet_all.onnx             # Auto — R2-Unet, multiclasse
+│
 ├── src/
 │   ├── controllers/
 │   │   └── main_controller.py      # Coordena view ↔ services
 │   │
 │   ├── models/
 │   │   ├── segmentation_state.py   # Estado global encapsulado
-│   │   └── tissue_config.py        # Constantes de tecidos e HU
+│   │   ├── tissue_config.py        # Constantes de tecidos e HU
+│   │   └── ml_tissue_config.py     # Registro dos modelos de ML (ONNX)
 │   │
 │   ├── services/
 │   │   ├── dicom_service.py        # Leitura e decompressão de DICOM
 │   │   ├── image_processing.py     # CLAHE, SLIC, remoção de pele
 │   │   ├── mask_io.py              # Leitura e escrita de máscaras CSV
-│   │   └── undo_manager.py         # Histórico de pinturas (UndoStack)
+│   │   ├── undo_manager.py         # Histórico de pinturas (UndoStack)
+│   │   └── ml_segmentation.py      # Inferência ONNX (predict_mask/predict_masks)
+│   │
+│   ├── workers/
+│   │   └── inference_worker.py     # Worker Qt — inferência fora da UI thread
 │   │
 │   ├── utils/
 │   │   ├── image_utils.py          # Funções auxiliares de imagem
@@ -117,13 +130,14 @@ SEG-guiPyside6/
 │       ├── toolbar.py              # Toolbar matplotlib estendida
 │       ├── params_dialog.py        # Diálogo de parâmetros SLIC/CLAHE
 │       ├── percentages_widget.py   # Gráfico de percentuais por tecido
-│       └── dialogs.py              # Diálogos auxiliares
+│       └── dialogs.py              # Diálogos auxiliares (inclui revisão de ML)
 │
 └── tests/
     ├── unit/
     │   ├── test_image_utils.py
     │   ├── test_image_processing.py
-    │   └── test_mask_io.py
+    │   ├── test_mask_io.py
+    │   └── test_ml_segmentation.py
     └── integration/
         └── test_pipeline.py
 ```
@@ -226,6 +240,8 @@ python app.py
 | `Ctrl+Z` | Desfazer última pintura |
 | `Ctrl+C` | Aplicar CLAHE |
 | `Ctrl+Shift+S` | Gerar SuperPixel |
+| `Ctrl+Shift+A` | Segmentação Semi-Auto (1 tecido) |
+| `Ctrl+Shift+B` | Segmentação Auto (lote multiclasse) |
 | `Ctrl+T` | Toggle visualização de superpixels |
 | `Ctrl+R` | Remover objetos externos |
 | `Ctrl+Shift+R` | Remover pele e objetos |
@@ -235,6 +251,25 @@ python app.py
 ### Configuração de diretórios padrão
 
 Acesse **Options → Default Open Directory** e **Options → Default Save Directory** para configurar os diretórios padrão de abertura e salvamento. As preferências são salvas em `local/` e não são versionadas.
+
+---
+
+## Segmentação automática (ML)
+
+Os modelos (`.onnx`) não são versionados no repositório — precisam ser colocados manualmente em `models/`:
+
+```
+models/
+├── unet_all.onnx       # alimenta o modo Semi-Auto
+└── r2_unet_all.onnx    # alimenta o modo Auto
+```
+
+Sem esses arquivos, a aplicação abre normalmente — só os itens de menu de segmentação automática ficam avisando que nenhum modelo está carregado (a segmentação manual não é afetada). Para gerar os `.onnx` a partir de pesos `.h5` treinados no repositório `ct-segmentation-unet`, ver `ct-segmentation-unet/scripts/convert_to_onnx.py`.
+
+- **View → Segmentação Semi-Auto** (`Ctrl+Shift+A`) — escolhe 1 tecido, roda o modelo, revisa (Aceitar/Editar/Rejeitar). Repetível para outro tecido.
+- **View → Segmentação Auto** (`Ctrl+Shift+B`) — 1 inferência para até 4 tecidos de uma vez (seleção prévia), revisados em sequência.
+
+Detalhes de arquitetura, decisões de projeto e histórico da integração estão em [`INTEGRACAO_MODELO_GUI.md`](INTEGRACAO_MODELO_GUI.md).
 
 ---
 
@@ -272,9 +307,10 @@ Principais dependências e suas funções no projeto:
 | opencv-python | 4.9.0.80 | Processamento de imagem |
 | matplotlib | 3.8.4 | Visualização e canvas interativo |
 | scipy | 1.12.0 | Transformadas de distância e morfologia |
+| onnxruntime | 1.29.0 | Inferência dos modelos de segmentação automática |
 
 ## TODO
 
-* [] Corrigir continuade de segmentação após abrir um arquivo csv "encima" de uma mesma DICOM
-* [] Implementar segmentação semiautomática de tomo a partir de um modelo
+* [x] Corrigir continuidade de segmentação após abrir um arquivo csv "em cima" de uma mesma DICOM
+* [x] Implementar segmentação semiautomática (e automática, multiclasse) de tomo a partir de um modelo
 * [] Implementar salvamento de dados de porcentagem e estado global

@@ -27,6 +27,12 @@ class SegmentationState:
     masks: list = field(default_factory=list)
     masks_empty: bool = True
 
+    # ── segmentação automática (ML) ──────────────────────────────────────────
+    # Proposta pendente de revisão (Aceitar/Editar/Rejeitar) — ver
+    # MainController.apply_ml_prediction/accept_ml_segmentation/etc.
+    ml_pending: bool = False
+    ml_snapshot: dict = field(default_factory=dict)
+
     # ── tecidos e cores ───────────────────────────────────────────────────────
     current_tissue: int = 0
     colorvec: object = field(

@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+    QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
 )
 from PySide6.QtGui import QPixmap
 
@@ -75,3 +75,43 @@ class MLReviewDialog(QDialog):
     def show(self) -> str | None:
         self.exec()
         return self._choice
+
+
+class MLTissueSelectionDialog(QDialog):
+    """
+    Diálogo do modo Auto (D4): escolha de quais tecidos, dentre os
+    cobertos pelo modelo multiclasse do modo Auto, aplicar nesta rodada.
+    Todos vêm marcados por padrão (o modelo roda para os 4 de qualquer
+    forma — isso só filtra quais propostas são de fato aplicadas/revisadas).
+
+    Uso:
+        selected = MLTissueSelectionDialog(tissues).show()
+        # selected é list[str] com pelo menos 1 item, ou None (cancelado
+        # ou nenhum tecido marcado)
+    """
+
+    def __init__(self, tissues: list[str], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("LAMAC")
+        self.setWindowIcon(QPixmap("assets/icon.png"))
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("<center>Segmentação Auto — selecione os tecidos:</center>"))
+
+        self._checkboxes: dict[str, QCheckBox] = {}
+        for tissue in tissues:
+            checkbox = QCheckBox(tissue)
+            checkbox.setChecked(True)
+            layout.addWidget(checkbox)
+            self._checkboxes[tissue] = checkbox
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def show(self) -> list[str] | None:
+        if self.exec() != QDialog.Accepted:
+            return None
+        selected = [t for t, cb in self._checkboxes.items() if cb.isChecked()]
+        return selected or None

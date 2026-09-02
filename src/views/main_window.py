@@ -1,5 +1,5 @@
 import numpy as np
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, QThreadPool, Slot
 from PySide6.QtGui import QAction, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QColorDialog, QFileDialog, QHBoxLayout,
@@ -8,11 +8,12 @@ from PySide6.QtWidgets import (
 
 from src.models.segmentation_state import SegmentationState
 from src.controllers.main_controller import MainController
-from src.views.dialogs import MLReviewDialog
+from src.views.dialogs import MLReviewDialog, MLTissueSelectionDialog
 from src.views.params_dialog import ParamsDialog
 from src.views.percentages_widget import PercentagesGraph
 from src.views.reference_panel import PlotWidgetModify
 from src.views.superpixel_panel import PlotSuperPixelMask
+from src.workers.inference_worker import InferenceWorker
 
 
 class ImageViewer(QMainWindow):
@@ -147,16 +148,17 @@ class ImageViewer(QMainWindow):
         s.show_superpixel = not s.show_superpixel
         self.plotsuperpixelmask.UpdateView()
 
-    def runAutoSegmentation(self):
+    def runSemiAutoSegmentation(self):
         """
-        Fluxo completo da segmentação automática:
+        Fluxo da Segmentação Semi-Auto (1 tecido por vez, D3):
         1. exige uma imagem DICOM carregada (aviso caso contrário);
         2. pergunta qual tecido segmentar — só lista tecidos com modelo
            efetivamente carregado (ver `available_ml_tissues`);
         3. pergunta a cor do tecido, só se ele ainda não tiver uma
            associada nesta sessão — senão reaproveita a cor existente;
-        4. roda o modelo e exibe o resultado sobreposto à imagem, sem
-           apagar nenhum tecido já segmentado antes;
+        4. roda o modelo num worker (não trava a UI) e, quando terminar,
+           exibe o resultado sobreposto à imagem, sem apagar nenhum
+           tecido já segmentado antes;
         5. pergunta a decisão do usuário (Aceitar / Editar / Rejeitar) e
            delega ao controller. O usuário pode repetir esse fluxo em
            seguida para outro tecido, normalmente.
@@ -167,7 +169,7 @@ class ImageViewer(QMainWindow):
         if np.array_equal(s.dicom_image_array, []):
             QMessageBox.warning(
                 self, "Aviso",
-                "Carregue uma imagem DICOM antes de usar a Segmentação Automática."
+                "Carregue uma imagem DICOM antes de usar a Segmentação Semi-Auto."
             )
             return
 
@@ -179,7 +181,7 @@ class ImageViewer(QMainWindow):
             return
 
         tissue, confirmed = QInputDialog.getItem(
-            self, "Segmentação Automática", "Tecido a segmentar", tissues, 0, False
+            self, "Segmentação Semi-Auto", "Tecido a segmentar", tissues, 0, False
         )
         if not confirmed:
             return
@@ -191,10 +193,14 @@ class ImageViewer(QMainWindow):
                 return
             color = qc
 
-        ok = c.run_ml_segmentation(tissue, color)
-        if not ok:
-            return
+        self._run_ml_worker(
+            c.predict_ml_single, (tissue,),
+            on_success=lambda predicted: self._review_ml_single(tissue, predicted, color),
+        )
 
+    def _review_ml_single(self, tissue: str, predicted, color) -> None:
+        c = self._controller
+        c.apply_ml_prediction(tissue, predicted, color)
         choice = MLReviewDialog(tissue, self).show()
         if choice == "accept":
             c.accept_ml_segmentation()
@@ -204,6 +210,105 @@ class ImageViewer(QMainWindow):
             # "reject" ou diálogo fechado sem escolha explícita:
             # por segurança, não deixamos uma proposta pendente sem decisão.
             c.reject_ml_segmentation()
+
+    def runBatchAutoSegmentation(self):
+        """
+        Fluxo da Segmentação Auto (multiclasse em lote, D4):
+        1. exige uma imagem DICOM carregada;
+        2. diálogo de seleção dos tecidos a aplicar (default: todos os
+           cobertos pelo modelo do modo Auto — ver `available_ml_batch_tissues`);
+        3. pergunta a cor só dos tecidos selecionados que ainda não
+           tiverem uma associada;
+        4. roda 1 única inferência (worker, não trava a UI) para todos os
+           tecidos selecionados;
+        5. aplica e revisa cada tecido, um de cada vez, reaproveitando
+           MLReviewDialog — igual ao Semi-Auto, só que em sequência.
+        """
+        s = self._state
+        c = self._controller
+
+        if np.array_equal(s.dicom_image_array, []):
+            QMessageBox.warning(
+                self, "Aviso",
+                "Carregue uma imagem DICOM antes de usar a Segmentação Auto."
+            )
+            return
+
+        tissues = c.available_ml_batch_tissues()
+        if not tissues:
+            QMessageBox.warning(
+                self, "Aviso", "Nenhum modelo de segmentação Auto está carregado."
+            )
+            return
+
+        selected = MLTissueSelectionDialog(tissues, self).show()
+        if not selected:
+            return
+
+        colors = {}
+        for tissue in selected:
+            if not c.tissue_has_color(tissue):
+                qc = QColorDialog.getColor(Qt.yellow, self, f"Cor para '{tissue}'")
+                if not qc.isValid():
+                    return
+                colors[tissue] = qc
+
+        self._run_ml_worker(
+            c.predict_ml_batch, (selected,),
+            on_success=lambda predictions: self._review_ml_batch(predictions, colors),
+        )
+
+    def _review_ml_batch(self, predictions: dict, colors: dict) -> None:
+        c = self._controller
+        for tissue, predicted in predictions.items():
+            c.apply_ml_prediction(tissue, predicted, colors.get(tissue))
+            choice = MLReviewDialog(tissue, self).show()
+            if choice == "accept":
+                c.accept_ml_segmentation()
+            elif choice == "edit":
+                c.edit_ml_segmentation()
+                # Editar troca para o modo de correção manual (superpixels)
+                # — não dá pra continuar revisando os próximos tecidos do
+                # lote nesse mesmo fluxo; os que ainda não foram
+                # processados simplesmente não são aplicados (o usuário
+                # pode rodar a Segmentação Auto de novo depois, se quiser).
+                break
+            else:
+                c.reject_ml_segmentation()
+
+    # ── worker de inferência (não bloqueia a UI) ──────────────────────────────
+
+    def _run_ml_worker(self, fn, args: tuple, on_success) -> None:
+        """
+        Roda `fn(*args)` — uma chamada de inferência pura, ver
+        `MainController.predict_ml_single`/`predict_ml_batch` — numa
+        thread do QThreadPool, e chama `on_success(resultado)` na thread
+        principal quando terminar. Desabilita as ações de ML enquanto
+        roda, para evitar disparar duas inferências ao mesmo tempo.
+        """
+        self.setCursor(Qt.WaitCursor)
+        self._set_ml_actions_enabled(False)
+
+        worker = InferenceWorker(fn, *args)
+        worker.signals.finished.connect(self._make_ml_success_handler(on_success))
+        worker.signals.failed.connect(self._on_ml_worker_failed)
+        QThreadPool.globalInstance().start(worker)
+
+    def _make_ml_success_handler(self, on_success):
+        def handler(result):
+            self.unsetCursor()
+            self._set_ml_actions_enabled(True)
+            on_success(result)
+        return handler
+
+    def _on_ml_worker_failed(self, message: str) -> None:
+        self.unsetCursor()
+        self._set_ml_actions_enabled(True)
+        QMessageBox.critical(self, "Erro na segmentação automática", message)
+
+    def _set_ml_actions_enabled(self, enabled: bool) -> None:
+        self.autoSegmentAct.setEnabled(enabled)
+        self.autoBatchSegmentAct.setEnabled(enabled)
 
     def calculatePercentages(self):
         self.graph = PercentagesGraph(self._state)
@@ -261,7 +366,8 @@ class ImageViewer(QMainWindow):
         self.exitAct                 = QAction("E&xit",                   self, shortcut="Ctrl+Q",       triggered=self.close)
         self.claheAct                = QAction("&Hist CLAHE",             self, shortcut="Ctrl+C",       triggered=self.HistMethodCLAHE)
         self.superpixelAct           = QAction("&SuperPixel",             self, shortcut="Ctrl+Shift+S", triggered=self.SuperPixel)
-        self.autoSegmentAct          = QAction("&Segmentação Automática", self, shortcut="Ctrl+Shift+A", triggered=self.runAutoSegmentation)
+        self.autoSegmentAct          = QAction("&Segmentação Semi-Auto", self, shortcut="Ctrl+Shift+A", triggered=self.runSemiAutoSegmentation)
+        self.autoBatchSegmentAct     = QAction("&Segmentação Auto",      self, shortcut="Ctrl+Shift+B", triggered=self.runBatchAutoSegmentation)
         self.toggleDensityAct        = QAction("&Toggle RD check",        self, shortcut="Ctrl+Shift+D", triggered=self.toggleRadioDensityCheck)
         self.originalImageAct        = QAction("&Original Image",         self,                          triggered=self.OriginalImage)
         self.removeObjectsAct        = QAction("&Remove Objects",         self, shortcut="Ctrl+R",       triggered=self.RemoveObjects)
@@ -286,8 +392,9 @@ class ImageViewer(QMainWindow):
         view_menu = QMenu("&View", self)
         for act in [
             self.originalImageAct, self.removeObjectsAct, self.removeSkinAct,
-            self.claheAct, self.superpixelAct, self.autoSegmentAct, self.toggleDensityAct,
-            self.toggleSuperpixelAct, self.backPaintAct, self.calculatePercentagesAct,
+            self.claheAct, self.superpixelAct, self.autoSegmentAct, self.autoBatchSegmentAct,
+            self.toggleDensityAct, self.toggleSuperpixelAct, self.backPaintAct,
+            self.calculatePercentagesAct,
         ]:
             view_menu.addAction(act)
 

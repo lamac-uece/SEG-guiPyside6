@@ -109,8 +109,11 @@ class ImageViewer(QMainWindow):
         pix.fill(color)
         self.color_action.setIcon(QIcon(pix))
 
-    def HistMethodCLAHE(self):
-        self._controller.apply_clahe()
+    def HistMethodCLAHE(self, checked: bool = False):
+        self._controller.toggle_clahe(checked)
+
+    def sync_clahe_action(self, enabled: bool):
+        self.claheAct.setChecked(enabled)
 
     def SuperPixel(self):
         self._controller.apply_superpixel()
@@ -155,13 +158,15 @@ class ImageViewer(QMainWindow):
         s   = self._state
         dlg = ParamsDialog(s, self)
         if dlg.exec():
+            if dlg.clahe_params_changed and s.clahe_enabled:
+                self._controller.reapply_clahe()
             if (
                 dlg.slic_params_changed
                 and not np.array_equal(s.dicom_image_array, [])
                 and not np.array_equal(s.segments_global, [])
             ):
                 self._controller.apply_superpixel()
-            else:
+            elif not (dlg.clahe_params_changed and s.clahe_enabled):
                 # Cor/grossura/opacidade da malha e demais ajustes
                 # apenas redesenham a malha, sem recomputar o SLIC.
                 self.plotsuperpixelmask.UpdateView()
@@ -211,6 +216,7 @@ class ImageViewer(QMainWindow):
         self.openAct                 = QAction("&Open...",                self, shortcut="Ctrl+O",       triggered=self.open)
         self.exitAct                 = QAction("E&xit",                   self, shortcut="Ctrl+Q",       triggered=self.close)
         self.claheAct                = QAction("&Hist CLAHE",             self, shortcut="Ctrl+C",       triggered=self.HistMethodCLAHE)
+        self.claheAct.setCheckable(True)
         self.superpixelAct           = QAction("&SuperPixel",             self, shortcut="Ctrl+Shift+S", triggered=self.SuperPixel)
         self.toggleDensityAct        = QAction("&Toggle RD check",        self, shortcut="Ctrl+Shift+D", triggered=self.toggleRadioDensityCheck)
         self.originalImageAct        = QAction("&Original Image",         self,                          triggered=self.OriginalImage)

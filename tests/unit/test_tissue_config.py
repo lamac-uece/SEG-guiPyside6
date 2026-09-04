@@ -2,6 +2,7 @@ import numpy as np
 
 from src.models.mesh_config import MESH_COLORS
 from src.models.tissue_config import (
+    DEFAULT_TISSUES,
     DEFAULT_TISSUE_COLORS,
     FALLBACK_COLOR,
     default_tissue_color,
@@ -45,3 +46,17 @@ def test_default_colors_derived_from_mesh_palette():
     assert set(DEFAULT_TISSUE_COLORS) == set(expected)
     for name, color in DEFAULT_TISSUE_COLORS.items():
         assert tuple(color) == expected[name]
+
+
+def test_default_tissues_order():
+    assert DEFAULT_TISSUES == (
+        "Fat",
+        "Intermuscular Fat",
+        "Visceral Fat",
+        "Muscle",
+    )
+
+
+def test_all_default_tissues_have_color():
+    for name in DEFAULT_TISSUES:
+        assert default_tissue_color(name) is not None

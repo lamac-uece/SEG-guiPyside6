@@ -63,6 +63,14 @@ DEFAULT_TISSUE_COLORS = {
 # Cor usada como fallback para tecidos sem cor padrão (ex.: Bone, Organ, Other).
 FALLBACK_COLOR = np.array([255, 255, 0])
 
+# Tecidos exibidos na paleta de seleção da interface (ordem de exibição).
+DEFAULT_TISSUES = (
+    "Fat",
+    "Intermuscular Fat",
+    "Visceral Fat",
+    "Muscle",
+)
+
 def default_tissue_color(tissue_name: str):
     """Retorna a cor padrão (np.array RGB 0–255) do tecido, ou None se não houver."""
     return DEFAULT_TISSUE_COLORS.get(tissue_name)

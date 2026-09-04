@@ -12,6 +12,7 @@ from src.views.params_dialog import ParamsDialog
 from src.views.percentages_widget import PercentagesGraph
 from src.views.reference_panel import PlotWidgetModify
 from src.views.superpixel_panel import PlotSuperPixelMask
+from src.views.tissue_palette import TissuePalette
 
 
 class ImageViewer(QMainWindow):
@@ -30,6 +31,12 @@ class ImageViewer(QMainWindow):
         self.bar.addWidget(QLabel(" Current tissue: "))
         self.current_tissue_label = QLabel("None")
         self.bar.addWidget(self.current_tissue_label)
+
+        self.addToolBarBreak()
+        self.tissue_palette = TissuePalette(
+            self, on_select=controller.select_tissue
+        )
+        self.addToolBar(self.tissue_palette)
 
         self.plotsuperpixelmask = PlotSuperPixelMask(
             state, self._mouse_event,
@@ -109,6 +116,10 @@ class ImageViewer(QMainWindow):
         pix.fill(color)
         self.color_action.setIcon(QIcon(pix))
 
+    def sync_tissue_palette(self):
+        """Sincroniza cores, destaque e habilitação da faixa de tecidos."""
+        self.tissue_palette.refresh(self._state)
+
     def HistMethodCLAHE(self, checked: bool = False):
         self._controller.toggle_clahe(checked)
 
@@ -148,6 +159,7 @@ class ImageViewer(QMainWindow):
         s.superpixel_auth = not s.superpixel_auth
         s.show_superpixel = not s.show_superpixel
         self.plotsuperpixelmask.UpdateView()
+        self.sync_tissue_palette()
 
     def calculatePercentages(self):
         self.graph = PercentagesGraph(self._state)

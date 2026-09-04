@@ -5,7 +5,7 @@ import os
 import numpy as np
 import pydicom
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from src.models.segmentation_state import SegmentationState
 from src.models.tissue_config import (
@@ -51,11 +51,10 @@ class MainController:
         self.set_clahe_enabled(False)
         s.masks_empty    = False
         s.current_tissue = 1
-        self._view.set_color(QColor(
-            int(s.informacoes["colors"][0][0]),
-            int(s.informacoes["colors"][0][1]),
-            int(s.informacoes["colors"][0][2]),
-        ))
+        if s.informacoes["tissue"]:
+            self._sync_tissue_ui(
+                self._tissue_name(s.informacoes["tissue"][0])
+            )
         self.recovery_mask3d()
         self._view.plotwidget_modify.axes.clear()
         self._view.plotwidget_modify.axes.set_title("Imagem Conferência")
@@ -89,11 +88,10 @@ class MainController:
             ok = CustomDialog().show()
         if ok:
             s.current_tissue = 1
-            v.set_color(QColor(
-                int(s.informacoes["colors"][0][0]),
-                int(s.informacoes["colors"][0][1]),
-                int(s.informacoes["colors"][0][2]),
-            ))
+            if s.informacoes["tissue"]:
+                self._sync_tissue_ui(
+                    self._tissue_name(s.informacoes["tissue"][0])
+                )
             s.segments_global = []
             self._update_selected_hu()
             self.recovery_mask3d()
@@ -106,28 +104,10 @@ class MainController:
             s.segmented_mask  = []
             s.segments_global = []
             s.informacoes     = {"colors": [], "identifier": [], "tissue": []}
-            item, confirmed = QInputDialog.getItem(
-                v, "Select the region to paint", "List of regions",
-                ("Fat", "Intermuscular Fat", "Visceral Fat",
-                 "Bone", "Muscle", "Organ", "Other"), 0, False
-            )
-            while not confirmed:
-                item, confirmed = QInputDialog.getItem(
-                    v, "Select the region to paint", "List of regions",
-                    ("Fat", "Intermuscular Fat", "Visceral Fat",
-                     "Bone", "Muscle", "Organ", "Other"), 0, False
-                )
-            color = default_tissue_color(item)
-            if color is None:
-                color = FALLBACK_COLOR
-            s.informacoes["colors"].append(color)
-            s.informacoes["identifier"].append(1)
-            s.informacoes["tissue"].append(dictTissues[item])
-            s.current_tissue = 1
-            v.current_tissue_label.setText(item)
-            v.set_color(QColor(int(color[0]), int(color[1]), int(color[2])))
+            v.current_tissue_label.setText("None")
             self._update_selected_hu()
             v.plotsuperpixelmask.UpdateView()
+            v.sync_tissue_palette()
 
     def recovery_mask3d(self) -> None:
         s = self._state
@@ -168,6 +148,8 @@ class MainController:
                          segments, plot: int) -> None:
         s = self._state
         if segments[int(y)][int(x)] == 0:
+            return
+        if s.current_tissue == 0:
             return
         if np.array_equal(s.segmented_mask, []):
             s.segmented_mask = np.zeros_like(s.dicom_image_array, dtype="uint8")
@@ -294,6 +276,7 @@ class MainController:
         if not np.array_equal(self._state.dicom_image_array, []):
             self._view.plotsuperpixelmask.SuperPixel()
             self._state.toggle_available = True
+            self._view.sync_tissue_palette()
 
     def remove_objects(self) -> None:
         s = self._state
@@ -328,66 +311,87 @@ class MainController:
             self._view.plotsuperpixelmask.im = ""
         self._refresh_superpixel_panel()
 
+    def select_tissue(self, tissue_name: str) -> None:
+        """Ativa um tecido para pintura, escolhido pela paleta da interface.
+
+        Se o tecido ainda não tiver entrada em `informacoes`, ela é criada
+        com a cor padrão (ou fallback). Só tem efeito com o SuperPixel ativo.
+        """
+        s = self._state
+        if not s.superpixel_auth:
+            return
+        idx = self._tissue_entry_index(tissue_name)
+        if idx is None:
+            size = len(s.informacoes["colors"])
+            color = default_tissue_color(tissue_name)
+            if color is None:
+                color = FALLBACK_COLOR
+            s.informacoes["colors"].append(color)
+            s.informacoes["identifier"].append(size + 1)
+            s.informacoes["tissue"].append(dictTissues[tissue_name])
+            idx = size
+        s.current_tissue = idx + 1
+        self._sync_tissue_ui(tissue_name)
+        self._update_selected_hu()
+        self._view.plotsuperpixelmask.UpdateView()
+
     def on_color_selected(self, color: QColor) -> None:
-        """Lógica completa de seleção de cor/tecido."""
-        s        = self._state
-        v        = self._view
-        selected = np.array([color.red(), color.green(), color.blue()])
-
-        found, index = False, 0
-        for i, c in enumerate(s.informacoes["colors"]):
-            if np.array_equal(c, selected):
-                tissue = s.informacoes["tissue"][i]
-                for key, val in dictTissues.items():
-                    if val == tissue:
-                        v.current_tissue_label.setText(key)
-                found, index = True, i
-                break
-
-        if found:
-            s.current_tissue = index + 1
-            v.set_color(color)
-        else:
-            item, ok = QInputDialog.getItem(
-                v, "Select the region to paint", "List of regions",
-                ("Fat", "Intermuscular Fat", "Visceral Fat",
-                 "Bone", "Muscle", "Organ", "Other"), 0, False
+        """Troca a cor do tecido atualmente selecionado na paleta."""
+        s = self._state
+        v = self._view
+        if s.current_tissue == 0:
+            QMessageBox.information(
+                v, "Nenhum tecido selecionado",
+                "Escolha um tecido na faixa superior antes de trocar a cor."
             )
-            if ok:
-                default = default_tissue_color(item)
-                if default is not None:
-                    selected = default
-                    color = QColor(
-                        int(default[0]), int(default[1]), int(default[2])
-                    )
-                v.set_color(color)
-                if s.informacoes["tissue"].count(dictTissues[item]) > 0:
-                    v.current_tissue_label.setText(item)
-                    s.current_tissue = (
-                        s.informacoes["tissue"].index(dictTissues[item]) + 1
-                    )
-                    s.informacoes["colors"][s.current_tissue - 1] = selected
-                    if not np.array_equal(s.mask3d, []):
-                        s.masks = np.zeros_like(s.dicom_image_array, dtype="bool")
-                        s.masks[s.segmented_mask == s.current_tissue] = 1
-                        ct = s.current_tissue - 1
-                        s.mask3d[:, :, 0] = (s.informacoes["colors"][ct][0] * s.masks
-                                             + s.mask3d[:, :, 0] * (~s.masks).astype("uint8"))
-                        s.mask3d[:, :, 1] = (s.informacoes["colors"][ct][1] * s.masks
-                                             + s.mask3d[:, :, 1] * (~s.masks).astype("uint8"))
-                        s.mask3d[:, :, 2] = (s.informacoes["colors"][ct][2] * s.masks
-                                             + s.mask3d[:, :, 2] * (~s.masks).astype("uint8"))
-                        v.plotsuperpixelmask.UpdateView()
-                else:
-                    size = len(s.informacoes["colors"])
-                    s.informacoes["colors"].append(selected)
-                    s.informacoes["identifier"].append(size + 1)
-                    s.informacoes["tissue"].append(dictTissues[item])
-                    s.current_tissue = size + 1
-                    v.current_tissue_label.setText(item)
-
+            return
+        selected = np.array([color.red(), color.green(), color.blue()])
+        idx = s.current_tissue - 1
+        s.informacoes["colors"][idx] = selected
+        name = self._tissue_name(s.informacoes["tissue"][idx])
+        if name is not None:
+            v.current_tissue_label.setText(name)
+        v.set_color(color)
+        if not np.array_equal(s.mask3d, []):
+            s.masks = np.zeros_like(s.dicom_image_array, dtype="bool")
+            s.masks[s.segmented_mask == s.current_tissue] = 1
+            ct = s.current_tissue - 1
+            s.mask3d[:, :, 0] = (s.informacoes["colors"][ct][0] * s.masks
+                                 + s.mask3d[:, :, 0] * (~s.masks).astype("uint8"))
+            s.mask3d[:, :, 1] = (s.informacoes["colors"][ct][1] * s.masks
+                                 + s.mask3d[:, :, 1] * (~s.masks).astype("uint8"))
+            s.mask3d[:, :, 2] = (s.informacoes["colors"][ct][2] * s.masks
+                                 + s.mask3d[:, :, 2] * (~s.masks).astype("uint8"))
         self._update_selected_hu()
         v.plotsuperpixelmask.UpdateView()
+        v.sync_tissue_palette()
+
+    def _tissue_entry_index(self, tissue_name: str):
+        """Índice da entrada do tecido em informacoes, ou None se não existir."""
+        try:
+            return self._state.informacoes["tissue"].index(
+                dictTissues[tissue_name]
+            )
+        except ValueError:
+            return None
+
+    def _tissue_name(self, tissue_id: int):
+        """Nome amigável do tecido a partir do id usado em informacoes."""
+        for key, val in dictTissues.items():
+            if val == tissue_id:
+                return key
+        return None
+
+    def _sync_tissue_ui(self, tissue_name: str) -> None:
+        """Atualiza label, ícone de cor e paleta conforme o tecido ativo."""
+        s = self._state
+        v = self._view
+        if tissue_name is not None:
+            v.current_tissue_label.setText(tissue_name)
+        if 0 < s.current_tissue <= len(s.informacoes["colors"]):
+            color = s.informacoes["colors"][s.current_tissue - 1]
+            v.set_color(QColor(int(color[0]), int(color[1]), int(color[2])))
+        v.sync_tissue_palette()
 
     def load_dirs(self) -> None:
         s = self._state
@@ -433,9 +437,14 @@ class MainController:
             v.plotsuperpixelmask.showSavedMask()
         else:
             v.plotsuperpixelmask.UpdateView()
+        v.sync_tissue_palette()
 
     def _update_selected_hu(self) -> None:
-        s      = self._state
+        s = self._state
+        if s.current_tissue == 0 or not s.informacoes["tissue"]:
+            shape = getattr(s.dicom_image_array, "shape", (0, 0))
+            s.selected_hu = np.ones(shape, dtype=bool)
+            return
         tissue = s.informacoes["tissue"][s.current_tissue - 1]
         if tissue in [1, 2, 3]:
             s.selected_hu = s.fat_hu

@@ -43,6 +43,8 @@ class MainController:
         s.csv_flag = True
         s.segmented_mask, s.informacoes, s.area, s.csv_source_id = load_mask(file_path)
         s.dicom_image_array = []
+        s.base_image_array  = []
+        self.set_clahe_enabled(False)
         s.masks_empty    = False
         s.current_tissue = 1
         self._view.set_color(QColor(
@@ -70,6 +72,7 @@ class MainController:
         s.selected_hu = np.ones(s.dicom_image_array.shape)
         s.area = int(np.count_nonzero(ConvertToUint8(roi)))
         s.dicom_image_array = ConvertToUint8(s.dicom_image_array)
+        self.set_clahe_enabled(False)
         self._view.plotwidget_modify.on_change()
         self._ask_initial_tissue()
         s.csv_flag = False
@@ -245,15 +248,39 @@ class MainController:
             save_mask(file_path, s.segmented_mask, s.informacoes, s.area,
                       s.dicom_source_id)
 
-    def apply_clahe(self) -> None:
+    def toggle_clahe(self, enabled: bool) -> None:
+        """Liga/desliga o CLAHE como opção On/Off aplicada uma única vez."""
         s = self._state
         if np.array_equal(s.dicom_image_array, []):
+            self._view.sync_clahe_action(False)
+            return
+        self._reset_toggle()
+        s.clahe_enabled = enabled
+        if s.masks_empty:
+            self._view.plotsuperpixelmask.im = ""
+        if enabled:
+            self._view.plotwidget_modify.EnableClahe()
+        else:
+            self._view.plotwidget_modify.DisableClahe()
+        self._refresh_superpixel_panel()
+        self._view.sync_clahe_action(enabled)
+
+    def reapply_clahe(self) -> None:
+        """Reaplica o CLAHE sobre a base após mudança de parâmetros."""
+        s = self._state
+        if not s.clahe_enabled or np.array_equal(s.dicom_image_array, []):
             return
         self._reset_toggle()
         if s.masks_empty:
             self._view.plotsuperpixelmask.im = ""
-        self._view.plotwidget_modify.HistMethodClahe()
+        self._view.plotwidget_modify.EnableClahe()
         self._refresh_superpixel_panel()
+
+    def set_clahe_enabled(self, enabled: bool) -> None:
+        """Seta o flag e mantém o menu sincronizado."""
+        self._state.clahe_enabled = enabled
+        if self._view is not None:
+            self._view.sync_clahe_action(enabled)
 
     def apply_superpixel(self) -> None:
         self._reset_toggle()
@@ -263,6 +290,7 @@ class MainController:
 
     def remove_objects(self) -> None:
         s = self._state
+        self.set_clahe_enabled(False)
         self._reset_toggle()
         if np.array_equal(s.dicom_image_array, []):
             return
@@ -273,6 +301,7 @@ class MainController:
 
     def remove_skin(self) -> None:
         s = self._state
+        self.set_clahe_enabled(False)
         self._reset_toggle()
         if np.array_equal(s.dicom_image_array, []):
             return
@@ -283,6 +312,7 @@ class MainController:
 
     def restore_original(self) -> None:
         s = self._state
+        self.set_clahe_enabled(False)
         self._reset_toggle()
         if not s.file_name_global or s.file_name_global.split(".")[-1] == "csv":
             return

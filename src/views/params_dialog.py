@@ -13,7 +13,9 @@ class ParamsDialog(QDialog):
         super().__init__(parent)
         self._state = state
         self.slic_params_changed = False
+        self.clahe_params_changed = False
         self._slic_params_before = self._current_slic_params()
+        self._clahe_params_before = self._current_clahe_params()
         self.setWindowTitle("Parameters")
         self._build_ui()
 
@@ -26,6 +28,13 @@ class ParamsDialog(QDialog):
             s.max_num_iter,
             s.min_size_factor,
             s.max_size_factor,
+        )
+
+    def _current_clahe_params(self) -> tuple:
+        s = self._state
+        return (
+            s.clip_limit,
+            s.nbins,
         )
 
     def _build_ui(self):
@@ -178,15 +187,19 @@ class ParamsDialog(QDialog):
             float(self.input_min_size.text().replace(",", ".")),
             float(self.input_max_size.text().replace(",", ".")),
         )
-        self.slic_params_changed = new_slic_params != self._slic_params_before
+        new_clahe_params  = (
+            float(self.input_clip_limit.text().replace(",", ".")),
+            int(self.input_nbins.text()),
+        )
+        self.slic_params_changed  = new_slic_params != self._slic_params_before
+        self.clahe_params_changed = new_clahe_params != self._clahe_params_before
+        s.clip_limit, s.nbins     = new_clahe_params
         s.num_segments    = new_slic_params[0]
         s.sigma_slic      = new_slic_params[1]
         s.compactness     = new_slic_params[2]
         s.max_num_iter    = new_slic_params[3]
         s.min_size_factor = new_slic_params[4]
         s.max_size_factor = new_slic_params[5]
-        s.clip_limit      = float(self.input_clip_limit.text().replace(",", "."))
-        s.nbins           = int(self.input_nbins.text())
         s.multiplicator   = float(self.input_multiplier.text().replace(",", "."))
         s.mesh_color      = self.input_mesh_color.currentData()
         s.mesh_mode       = self.input_mesh_mode.currentData()

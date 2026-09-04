@@ -22,7 +22,7 @@ Ferramenta de segmentação manual de imagens tomográficas desenvolvida no **LA
 - Pré-processamento de imagem:
   - Remoção de objetos externos (mesa, lençol)
   - Remoção de pele
-  - Equalização adaptativa de histograma (CLAHE)
+  - Equalização adaptativa de histograma (CLAHE) como opção On/Off
 - Segmentação por superpixels via algoritmo SLIC
 - Pintura manual interativa de regiões por tecido
 - Suporte a múltiplos tecidos por imagem: Gordura, Gordura Intramuscular, Gordura Visceral, Osso, Músculo, Órgão e Outros
@@ -211,7 +211,7 @@ python app.py
 1. **File → Open** — abre um arquivo `.dcm` ou uma máscara `.csv` salva anteriormente
 2. **View → Remove Objects** — remove mesa e objetos externos (opcional)
 3. **View → Remove Skin and Objects** — remove também a camada de pele (opcional)
-4. **View → Hist CLAHE** — aplica equalização de histograma (opcional)
+4. **View → Hist CLAHE** — liga/desliga a equalização de histograma (opcional); é aplicada uma única vez sobre a imagem atual e pode ser desativada sem distorcer o resultado
 5. **View → SuperPixel** — gera a segmentação por superpixels
 6. Clique nas regiões da imagem para pintar o tecido atual
 7. Use o ícone de cor na toolbar superior para trocar de tecido
@@ -224,7 +224,7 @@ python app.py
 | `Ctrl+O` | Abrir arquivo |
 | `Ctrl+S` | Salvar máscara |
 | `Ctrl+Z` | Desfazer última pintura |
-| `Ctrl+C` | Aplicar CLAHE |
+| `Ctrl+C` | Ligar/desligar CLAHE |
 | `Ctrl+Shift+S` | Gerar SuperPixel |
 | `Ctrl+T` | Toggle visualização de superpixels |
 | `Ctrl+R` | Remover objetos externos |

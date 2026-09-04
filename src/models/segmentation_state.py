@@ -17,6 +17,7 @@ class SegmentationState:
 
     # ── imagem ────────────────────────────────────────────────────────────────
     dicom_image_array: list = field(default_factory=list)
+    base_image_array: list = field(default_factory=list)
     area: int = 1
     graph: str = ""
 
@@ -64,6 +65,7 @@ class SegmentationState:
     # ── parâmetros CLAHE ──────────────────────────────────────────────────────
     clip_limit: float = 0.03
     nbins: int = 256
+    clahe_enabled: bool = False
 
     # ── aparência da malha do SuperPixel ────────────────────────────────────────
     mesh_color: tuple = (0.0, 0.0, 1.0)

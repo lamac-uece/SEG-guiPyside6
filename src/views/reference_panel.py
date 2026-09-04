@@ -1,3 +1,4 @@
+import numpy as np
 import pydicom
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 from matplotlib.figure import Figure
@@ -38,12 +39,25 @@ class PlotWidgetModify(QWidget):
         self._state.current_plot = 1
         self._mouse_event_cb(event, 2)
 
-    def HistMethodClahe(self):
+    def _set_base(self, base_img):
+        """Registra a imagem base (pré-CLAHE) e exibe o resultado atual."""
         s = self._state
-        if not s.file_name_global:
+        s.base_image_array = base_img
+        s.dicom_image_array = base_img
+        s.superpixel_auth = False
+        self.axes.clear()
+        self.axes.set_title("Imagem Conferência")
+        if s.file_name_global:
+            self.axes.imshow(s.dicom_image_array, cmap='gray')
+            self.view.draw()
+
+    def EnableClahe(self):
+        """Aplica CLAHE uma única vez sobre a imagem base."""
+        s = self._state
+        if np.array_equal(s.base_image_array, []):
             return
         s.dicom_image_array = apply_clahe(
-            s.dicom_image_array,
+            s.base_image_array,
             clip_limit=s.clip_limit,
             nbins=s.nbins,
         )
@@ -53,54 +67,56 @@ class PlotWidgetModify(QWidget):
         self.axes.imshow(s.dicom_image_array, cmap='gray')
         self.view.draw()
 
+    def DisableClahe(self):
+        """Volta à imagem base (escala de cinza original/pré-processada)."""
+        s = self._state
+        if np.array_equal(s.base_image_array, []):
+            return
+        s.dicom_image_array = s.base_image_array
+        s.superpixel_auth = False
+        self.axes.clear()
+        self.axes.set_title("Imagem Conferência")
+        self.axes.imshow(s.dicom_image_array, cmap='gray')
+        self.view.draw()
+
     def on_change(self):
         """Exibe a imagem atual após conversão para uint8."""
         s = self._state
-        s.dicom_image_array = ConvertToUint8(s.dicom_image_array)
-        s.superpixel_auth   = False
-        self.axes.clear()
-        self.axes.set_title("Imagem Conferência")
-        if s.file_name_global:
-            self.axes.imshow(s.dicom_image_array, cmap='gray')
-            self.view.draw()
+        base_img        = ConvertToUint8(s.dicom_image_array)
+        s.dicom_image_array = base_img
+        self._set_base(base_img)
 
     def ResetDicom(self):
         """Relê o DICOM do disco e exibe sem processamento."""
         s = self._state
         if s.file_name_global:
-            s.dicom_image_array = ConvertToUint8(
-                dicom2array(pydicom.dcmread(s.file_name_global, force=True))
+            self._set_base(
+                ConvertToUint8(
+                    dicom2array(pydicom.dcmread(s.file_name_global, force=True))
+                )
             )
-        s.superpixel_auth = False
-        self.axes.set_title("Imagem Conferência")
-        self.axes.imshow(s.dicom_image_array, cmap='gray')
-        self.view.draw()
 
     def DeleteObjects(self):
         """Remove objetos externos (mesa, lençol) sem remover pele."""
         s = self._state
         if s.file_name_global:
-            s.dicom_image_array = ConvertToUint8(
-                select_RoI(
-                    dicom2array(pydicom.dcmread(s.file_name_global, force=True))
+            self._set_base(
+                ConvertToUint8(
+                    select_RoI(
+                        dicom2array(pydicom.dcmread(s.file_name_global, force=True))
+                    )
                 )
             )
-        s.superpixel_auth = False
-        self.axes.set_title("Imagem Conferência")
-        self.axes.imshow(s.dicom_image_array, cmap='gray')
-        self.view.draw()
 
     def DeleteSkinAndObjects(self):
         """Remove pele e objetos externos."""
         s = self._state
         if s.file_name_global:
-            s.dicom_image_array = ConvertToUint8(
-                removeSkinAndObjects(
-                    dicom2array(pydicom.dcmread(s.file_name_global, force=True)),
-                    s.multiplicator,
+            self._set_base(
+                ConvertToUint8(
+                    removeSkinAndObjects(
+                        dicom2array(pydicom.dcmread(s.file_name_global, force=True)),
+                        s.multiplicator,
+                    )
                 )
             )
-        s.superpixel_auth = False
-        self.axes.set_title("Imagem Conferência")
-        self.axes.imshow(s.dicom_image_array, cmap='gray')
-        self.view.draw()

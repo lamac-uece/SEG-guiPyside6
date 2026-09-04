@@ -152,9 +152,19 @@ class ImageViewer(QMainWindow):
         self.graph.show()
 
     def changeOptions(self):
-        if ParamsDialog(self._state, self).exec():
-            # Cor/grossura/opacidade da malha não exigem recomputar o SLIC
-            self.plotsuperpixelmask.UpdateView()
+        s   = self._state
+        dlg = ParamsDialog(s, self)
+        if dlg.exec():
+            if (
+                dlg.slic_params_changed
+                and not np.array_equal(s.dicom_image_array, [])
+                and not np.array_equal(s.segments_global, [])
+            ):
+                self._controller.apply_superpixel()
+            else:
+                # Cor/grossura/opacidade da malha e demais ajustes
+                # apenas redesenham a malha, sem recomputar o SLIC.
+                self.plotsuperpixelmask.UpdateView()
 
     def alternar(self):
         s = self._state

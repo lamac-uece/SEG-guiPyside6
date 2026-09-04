@@ -25,7 +25,7 @@ Ferramenta de segmentação manual de imagens tomográficas desenvolvida no **LA
   - Equalização adaptativa de histograma (CLAHE) como opção On/Off
 - Segmentação por superpixels via algoritmo SLIC
 - Pintura manual interativa de regiões por tecido
-- Suporte a múltiplos tecidos por imagem: Gordura, Gordura Intramuscular, Gordura Visceral, Osso, Músculo, Órgão e Outros
+- Suporte a múltiplos tecidos por imagem: Gordura, Gordura Intermuscular, Gordura Visceral, Osso, Músculo, Órgão e Outros
 - Filtragem por densidade Hounsfield (HU) por tipo de tecido
 - Desfazer pinturas (undo) com histórico de até 15 entradas
 - Exportação e importação de máscaras em formato `.csv`
@@ -212,10 +212,11 @@ python app.py
 2. **View → Remove Objects** — remove mesa e objetos externos (opcional)
 3. **View → Remove Skin and Objects** — remove também a camada de pele (opcional)
 4. **View → Hist CLAHE** — liga/desliga a equalização de histograma (opcional); é aplicada uma única vez sobre a imagem atual e pode ser desativada sem distorcer o resultado
-5. **View → SuperPixel** — gera a segmentação por superpixels
-6. Clique nas regiões da imagem para pintar o tecido atual
-7. Use o ícone de cor na toolbar superior para trocar de tecido
-8. **File → Save** ou `Ctrl+S` — exporta a máscara em `.csv`
+5. **View → SuperPixel** — gera a segmentação por superpixels; com ele ativo, a faixa de tecidos no topo fica disponível
+6. Clique na caixa do tecido desejado na faixa superior (Fat, Intermuscular Fat, Visceral Fat ou Muscle) para ativá-lo; o tecido é criado com a cor padrão na primeira vez
+7. Clique nas regiões da imagem para pintar o tecido atual
+8. Use o ícone de cor ao lado de "Current tissue" para trocar a cor do tecido atualmente selecionado
+9. **File → Save** ou `Ctrl+S` — exporta a máscara em `.csv`
 
 ### Atalhos de teclado
 

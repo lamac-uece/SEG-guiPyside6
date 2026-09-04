@@ -25,7 +25,7 @@ Ferramenta de segmentação manual de imagens tomográficas desenvolvida no **LA
   - Equalização adaptativa de histograma (CLAHE) como opção On/Off
 - Segmentação por superpixels via algoritmo SLIC
 - Pintura manual interativa de regiões por tecido
-- Suporte a múltiplos tecidos por imagem: Gordura, Gordura Intramuscular, Gordura Visceral, Osso, Músculo, Órgão e Outros
+- Suporte a múltiplos tecidos por imagem: Gordura, Gordura Intermuscular, Gordura Visceral, Osso, Músculo, Órgão e Outros
 - Filtragem por densidade Hounsfield (HU) por tipo de tecido
 - Desfazer pinturas (undo) com histórico de até 15 entradas
 - Exportação e importação de máscaras em formato `.csv`

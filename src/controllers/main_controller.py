@@ -8,7 +8,11 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from src.models.segmentation_state import SegmentationState
-from src.models.tissue_config import dictTissues
+from src.models.tissue_config import (
+    FALLBACK_COLOR,
+    default_tissue_color,
+    dictTissues,
+)
 from src.services.dicom_service import dicom2array, get_dicom_identifier
 from src.services.image_processing import select_RoI
 from src.services.mask_io import load_mask, save_mask
@@ -104,21 +108,24 @@ class MainController:
             s.informacoes     = {"colors": [], "identifier": [], "tissue": []}
             item, confirmed = QInputDialog.getItem(
                 v, "Select the region to paint", "List of regions",
-                ("Fat", "Intramuscular Fat", "Visceral Fat",
+                ("Fat", "Intermuscular Fat", "Visceral Fat",
                  "Bone", "Muscle", "Organ", "Other"), 0, False
             )
             while not confirmed:
                 item, confirmed = QInputDialog.getItem(
                     v, "Select the region to paint", "List of regions",
-                    ("Fat", "Intramuscular Fat", "Visceral Fat",
+                    ("Fat", "Intermuscular Fat", "Visceral Fat",
                      "Bone", "Muscle", "Organ", "Other"), 0, False
                 )
-            s.informacoes["colors"].append(np.array([255, 255, 0]))
+            color = default_tissue_color(item)
+            if color is None:
+                color = FALLBACK_COLOR
+            s.informacoes["colors"].append(color)
             s.informacoes["identifier"].append(1)
             s.informacoes["tissue"].append(dictTissues[item])
             s.current_tissue = 1
             v.current_tissue_label.setText(item)
-            v.set_color(QColor(255, 255, 0))
+            v.set_color(QColor(int(color[0]), int(color[1]), int(color[2])))
             self._update_selected_hu()
             v.plotsuperpixelmask.UpdateView()
 
@@ -343,10 +350,16 @@ class MainController:
         else:
             item, ok = QInputDialog.getItem(
                 v, "Select the region to paint", "List of regions",
-                ("Fat", "Intramuscular Fat", "Visceral Fat",
+                ("Fat", "Intermuscular Fat", "Visceral Fat",
                  "Bone", "Muscle", "Organ", "Other"), 0, False
             )
             if ok:
+                default = default_tissue_color(item)
+                if default is not None:
+                    selected = default
+                    color = QColor(
+                        int(default[0]), int(default[1]), int(default[2])
+                    )
                 v.set_color(color)
                 if s.informacoes["tissue"].count(dictTissues[item]) > 0:
                     v.current_tissue_label.setText(item)

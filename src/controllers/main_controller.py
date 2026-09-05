@@ -56,9 +56,6 @@ class MainController:
                 self._tissue_name(s.informacoes["tissue"][0])
             )
         self.recovery_mask3d()
-        self._view.plotwidget_modify.axes.clear()
-        self._view.plotwidget_modify.axes.set_title("Imagem Conferência")
-        self._view.plotwidget_modify.view.draw()
 
     def _open_dicom(self, file_path: str) -> None:
         s   = self._state
@@ -76,7 +73,7 @@ class MainController:
         s.area = int(np.count_nonzero(ConvertToUint8(roi)))
         s.dicom_image_array = ConvertToUint8(s.dicom_image_array)
         self.set_clahe_enabled(False)
-        self._view.plotwidget_modify.on_change()
+        self._view.plotsuperpixelmask.on_change()
         self._ask_initial_tissue()
         s.csv_flag = False
 
@@ -248,9 +245,9 @@ class MainController:
         if s.masks_empty:
             self._view.plotsuperpixelmask.im = ""
         if enabled:
-            self._view.plotwidget_modify.EnableClahe()
+            self._view.plotsuperpixelmask.EnableClahe()
         else:
-            self._view.plotwidget_modify.DisableClahe()
+            self._view.plotsuperpixelmask.DisableClahe()
         self._refresh_superpixel_panel()
         self._view.sync_clahe_action(enabled)
 
@@ -262,7 +259,7 @@ class MainController:
         self._reset_toggle()
         if s.masks_empty:
             self._view.plotsuperpixelmask.im = ""
-        self._view.plotwidget_modify.EnableClahe()
+        self._view.plotsuperpixelmask.EnableClahe()
         self._refresh_superpixel_panel()
 
     def set_clahe_enabled(self, enabled: bool) -> None:
@@ -286,7 +283,7 @@ class MainController:
             return
         if s.masks_empty:
             self._view.plotsuperpixelmask.im = ""
-        self._view.plotwidget_modify.DeleteObjects()
+        self._view.plotsuperpixelmask.DeleteObjects()
         self._refresh_superpixel_panel()
 
     def remove_skin(self) -> None:
@@ -297,7 +294,7 @@ class MainController:
             return
         if s.masks_empty:
             self._view.plotsuperpixelmask.im = ""
-        self._view.plotwidget_modify.DeleteSkinAndObjects()
+        self._view.plotsuperpixelmask.DeleteSkinAndObjects()
         self._refresh_superpixel_panel()
 
     def restore_original(self) -> None:
@@ -306,7 +303,7 @@ class MainController:
         self._reset_toggle()
         if not s.file_name_global or s.file_name_global.split(".")[-1] == "csv":
             return
-        self._view.plotwidget_modify.ResetDicom()
+        self._view.plotsuperpixelmask.ResetDicom()
         if s.masks_empty:
             self._view.plotsuperpixelmask.im = ""
         self._refresh_superpixel_panel()
